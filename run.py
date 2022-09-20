@@ -8,7 +8,7 @@ def get_sim_params():
     p.dt=0.01666666753590107
     p.enable_actor_creation_warning=True
     p.flex=gymapi.FlexParams()
-    p.gravity=gymapi.Vec3(0.000000, -9.800000, 0.000000)
+    p.gravity=gymapi.Vec3(0.0, 0.0, -9.8) # default gymapi.Vec3(0.000000, -9.800000, 0.000000)
     p.num_client_threads=0
     def get_physxparams():
         px = gymapi.PhysXParams()
