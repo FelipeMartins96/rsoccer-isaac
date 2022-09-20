@@ -72,6 +72,12 @@ def get_plane_params():
 plane_params = get_plane_params()
 gym.add_ground(sim, plane_params)
 
+# Create env
+spacing = 1.0
+lower = gymapi.Vec3(-spacing, -spacing, 0)
+upper = gymapi.Vec3(spacing, spacing, spacing)
+env = gym.create_env(sim, lower, upper, 1)
+
 # Run loop
 while not gym.query_viewer_has_closed(viewer):
     # step the physics
