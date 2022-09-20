@@ -58,6 +58,10 @@ def get_camera_properties():
 cam_props = get_camera_properties()
 viewer = gym.create_viewer(sim, cam_props)
 
+cam_pos = gymapi.Vec3(0.0, -2, 0.4)
+cam_target = gymapi.Vec3(0.0, 0.0, 0.0)
+gym.viewer_camera_look_at(viewer, None, cam_pos, cam_target)
+
 # Create ground plane
 def get_plane_params():
     p = gymapi.PlaneParams()
