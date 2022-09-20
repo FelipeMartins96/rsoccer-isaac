@@ -82,6 +82,40 @@ lower = gymapi.Vec3(-spacing, -spacing, 0)
 upper = gymapi.Vec3(spacing, spacing, spacing)
 env = gym.create_env(sim, lower, upper, 1)
 
+# Add actor
+def get_asset_options():
+    a = gymapi.AssetOptions()
+    a.angular_damping=0.5
+    a.armature=0.0
+    a.collapse_fixed_joints=False
+    a.convex_decomposition_from_submeshes=False
+    a.default_dof_drive_mode=0
+    a.density=1000.0
+    a.disable_gravity=False
+    a.enable_gyroscopic_forces=True
+    a.fix_base_link=False
+    a.flip_visual_attachments=False
+    a.linear_damping=0.0
+    a.max_angular_velocity=64.0
+    a.max_linear_velocity=1000.0
+    a.mesh_normal_mode=gymapi.FROM_ASSET
+    a.min_particle_mass=9.999999960041972e-13
+    a.override_com=False
+    a.override_inertia=False
+    a.replace_cylinder_with_capsule=False
+    a.slices_per_cylinder=100 #default 20
+    a.tendon_limit_stiffness=1.0
+    a.thickness=0.019999999552965164
+    a.use_mesh_materials=False
+    a.use_physx_armature=True
+    a.vhacd_enabled=False
+    a.vhacd_params=gymapi.VhacdParams()
+    return a
+asset_options = get_asset_options()
+asset = gym.load_asset(sim=sim, rootpath='./assets/', filename='vss_robot.urdf', options=asset_options)
+gym.create_actor(env, asset, pose=gymapi.Transform())
+
+
 # Run loop
 while not gym.query_viewer_has_closed(viewer):
     # step the physics
