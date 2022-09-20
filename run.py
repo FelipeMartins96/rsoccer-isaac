@@ -2,6 +2,7 @@ from isaacgym import gymapi
 
 gym = gymapi.acquire_gym()
 
+# Create sim
 def get_sim_params():
     p = gymapi.SimParams()
     p.dt=0.01666666753590107
@@ -40,6 +41,7 @@ def get_sim_params():
 sim_params = get_sim_params()
 sim = gym.create_sim(compute_device=0, graphics_device=0, type=gymapi.SIM_PHYSX, params=sim_params)
 
+# Create viewer
 def get_camera_properties():
     c = gymapi.CameraProperties()
     c.enable_tensors=False
@@ -56,7 +58,7 @@ def get_camera_properties():
 cam_props = get_camera_properties()
 viewer = gym.create_viewer(sim, cam_props)
 
-# configure the ground plane
+# Create ground plane
 def get_plane_params():
     p = gymapi.PlaneParams()
     p.distance=0.0
@@ -70,14 +72,19 @@ def get_plane_params():
 plane_params = get_plane_params()
 gym.add_ground(sim, plane_params)
 
-while True:
+# Run loop
+while not gym.query_viewer_has_closed(viewer):
     # step the physics
     gym.simulate(sim)
     gym.fetch_results(sim, True)
+
+    # update the viewer
     gym.step_graphics(sim);
     gym.draw_viewer(viewer, sim, True)
-    gym.sync_frame_time(sim)
 
+    # Wait for dt to elapse in real time.
+    # This synchronizes the physics simulation with the rendering rate.
+    gym.sync_frame_time(sim)
 
 gym.destroy_viewer(viewer)
 gym.destroy_sim(sim)
