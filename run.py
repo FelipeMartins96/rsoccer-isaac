@@ -113,18 +113,37 @@ def get_asset_options():
     return a
 asset_options = get_asset_options()
 asset = gym.load_asset(sim=sim, rootpath='./assets/', filename='vss_robot.urdf', options=asset_options)
-gym.create_actor(env, asset, pose=gymapi.Transform())
+actor = gym.create_actor(env, asset, pose=gymapi.Transform(p=gymapi.Vec3(0, 0, 0.03)))
 
+props = gym.get_actor_rigid_shape_properties(env, actor)
+props[0].friction = 0.0
+gym.set_actor_rigid_shape_properties(env, actor, props)
 
+props = gym.get_actor_dof_properties(env, actor)
+props["driveMode"].fill(gymapi.DOF_MODE_VEL)
+props["stiffness"].fill(0.0)
+props["damping"].fill(200.0)
+gym.set_actor_dof_properties(env, actor, props)
+
+lwh = gym.find_actor_dof_handle(env, actor, 'body_leftWheel')
+rwh = gym.find_actor_dof_handle(env, actor, 'body_rightWheel')
+
+i = 0
 # Run loop
 while not gym.query_viewer_has_closed(viewer):
     # step the physics
     gym.simulate(sim)
     gym.fetch_results(sim, True)
+    
+    if i > 60:
+        gym.set_dof_target_velocity(env, lwh, 20.0)
+        gym.set_dof_target_velocity(env, rwh, 20.0)
+    i += 1
 
     # update the viewer
     gym.step_graphics(sim);
     gym.draw_viewer(viewer, sim, True)
+    gym.draw_env_rigid_contacts(viewer, env, gymapi.Vec3(1.0,0.0,0.0), 10, True) 
 
     # Wait for dt to elapse in real time.
     # This synchronizes the physics simulation with the rendering rate.
