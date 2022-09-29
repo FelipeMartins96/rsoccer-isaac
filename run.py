@@ -58,7 +58,7 @@ def get_camera_properties():
 cam_props = get_camera_properties()
 viewer = gym.create_viewer(sim, cam_props)
 
-cam_pos = gymapi.Vec3(0.0, -2, 0.4)
+cam_pos = gymapi.Vec3(0.0, -0.2, 4)
 cam_target = gymapi.Vec3(0.0, 0.0, 0.0)
 gym.viewer_camera_look_at(viewer, None, cam_pos, cam_target)
 
@@ -127,6 +127,77 @@ gym.set_actor_dof_properties(env, actor, props)
 
 lwh = gym.find_actor_dof_handle(env, actor, 'body_leftWheel')
 rwh = gym.find_actor_dof_handle(env, actor, 'body_rightWheel')
+
+
+def add_field(group=0, filter=0b1):
+    # Using procedural assets because with an urdf file rigid contacts were not being drawn
+    # Height (x), Width (Y), Depth (Z)
+    totalWidth = 2.0    # personal choice
+    totalHeight = 1.5   # personal choice
+    fieldWidth = 1.5    
+    fieldHeight = 1.3    
+    goalWidth = 0.1     
+    goalHeight = 0.4    
+    wallsDepth = 0.1    # on rules its 0.05
+
+    options = get_asset_options()
+    options.fix_base_link = True
+    color = gymapi.Vec3(0.2, 0.2, 0.2)
+
+    # Side Walls (sw)
+    def add_side_walls():
+        swWidth = totalWidth
+        swHeight = (totalHeight - fieldHeight) / 2      
+        swX = 0
+        swY = (fieldHeight + swHeight) / 2 
+        swZ = wallsDepth/2
+        swDirs = [(1, 1), (1, -1)] # Top and Bottom
+
+        swAsset = gym.create_box(sim, swWidth, swHeight, wallsDepth, options)
+
+        for dirX, dirY in swDirs:
+            swPose = gymapi.Transform(p=gymapi.Vec3(dirX * swX, dirY * swY, swZ))
+            swActor = gym.create_actor(env=env, asset=swAsset,pose=swPose, group=group, filter=filter)
+            gym.set_rigid_body_color(env, swActor, 0, gymapi.MESH_VISUAL, color)
+    
+    # End Walls (ew)
+    def add_end_walls():
+        ewWidth = (totalWidth - fieldWidth) / 2
+        ewHeight = (fieldHeight - goalHeight) / 2
+        ewX = (fieldWidth + ewWidth) / 2
+        ewY = (fieldHeight - ewHeight) / 2
+        ewZ = wallsDepth/2
+        ewDirs = [(-1, 1), (1, 1), (-1, -1), (1, -1)] # Corners
+
+        ewAsset = gym.create_box(sim, ewWidth, ewHeight, wallsDepth, options)
+
+        for dirX, dirY in ewDirs:
+            ewPose = gymapi.Transform(p=gymapi.Vec3(dirX * ewX, dirY * ewY, ewZ))
+            ewActor = gym.create_actor(env=env, asset=ewAsset,pose=ewPose, group=group, filter=filter)
+            gym.set_rigid_body_color(env, ewActor, 0, gymapi.MESH_VISUAL, color)
+    
+    # Goal Walls (gw)
+    def add_goal_walls():
+        gwWidth = ((totalWidth - fieldWidth) / 2) - goalWidth
+        gwHeight = goalHeight
+        gwX = (totalWidth - gwWidth) / 2
+        gwY = 0
+        gwZ = wallsDepth/2
+        gwDirs = [(-1, 1), (1, 1)] # left and right
+
+        gwAsset = gym.create_box(sim, gwWidth, gwHeight, wallsDepth, options)
+
+        for dirX, dirY in gwDirs:
+            gwPose = gymapi.Transform(p=gymapi.Vec3(dirX * gwX, dirY * gwY, gwZ))
+            gwActor = gym.create_actor(env=env, asset=gwAsset,pose=gwPose, group=group, filter=filter)
+            gym.set_rigid_body_color(env, gwActor, 0, gymapi.MESH_VISUAL, color)
+
+    add_side_walls()
+    add_end_walls()
+    add_goal_walls()
+
+add_field()
+
 
 i = 0
 # Run loop
