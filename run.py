@@ -27,7 +27,7 @@ def get_sim_params():
         px.num_velocity_iterations=1
         px.rest_offset=0.0010000000474974513
         px.solver_type=1
-        px.use_gpu=False
+        px.use_gpu=True
         return px
     p.physx= get_physxparams()
     p.stress_visualization=False
@@ -111,23 +111,27 @@ def get_asset_options():
     a.vhacd_enabled=False
     a.vhacd_params=gymapi.VhacdParams()
     return a
-asset_options = get_asset_options()
-asset = gym.load_asset(sim=sim, rootpath='./assets/', filename='vss_robot.urdf', options=asset_options)
-actor = gym.create_actor(env, asset, pose=gymapi.Transform(p=gymapi.Vec3(0, 0, 0.03)))
 
-props = gym.get_actor_rigid_shape_properties(env, actor)
-props[0].friction = 0.0
-gym.set_actor_rigid_shape_properties(env, actor, props)
+def add_robot(group=0):
+    options = gymapi.AssetOptions()
+    rbt_asset = gym.load_asset(sim=sim, rootpath='./assets/', filename='vss_robot.urdf', options=options)
+    rbt_initial_height = 0.028 # Z dimension
+    rbt_pose = gymapi.Transform(p=gymapi.Vec3(0, 0.1, rbt_initial_height))
+    actor = gym.create_actor(env=env, asset=rbt_asset,pose=rbt_pose, group=group, filter=0b0, name='robot')
 
-props = gym.get_actor_dof_properties(env, actor)
-props["driveMode"].fill(gymapi.DOF_MODE_VEL)
-props["stiffness"].fill(0.0)
-props["damping"].fill(200.0)
-gym.set_actor_dof_properties(env, actor, props)
+    props = gym.get_actor_rigid_shape_properties(env, actor)
+    body, left_wheel, right_wheel = 0, 1, 2
+    props[body].friction = 0.0
+    props[body].filter = 0b0
+    props[left_wheel].filter = 0b1
+    props[right_wheel].filter = 0b1
+    gym.set_actor_rigid_shape_properties(env, actor, props)
 
-lwh = gym.find_actor_dof_handle(env, actor, 'body_leftWheel')
-rwh = gym.find_actor_dof_handle(env, actor, 'body_rightWheel')
-
+    props = gym.get_actor_dof_properties(env, actor)
+    props["driveMode"].fill(gymapi.DOF_MODE_VEL)
+    props["stiffness"].fill(0.0)
+    props["damping"].fill(200.0)
+    gym.set_actor_dof_properties(env, actor, props)
 
 def add_field(group=0, filter=0b1):
     # Using procedural assets because with an urdf file rigid contacts were not being drawn
@@ -196,7 +200,12 @@ def add_field(group=0, filter=0b1):
     add_end_walls()
     add_goal_walls()
 
+add_robot()
 add_field()
+
+robot_handle = gym.find_actor_handle(env, 'robot')
+lwh = gym.find_actor_dof_handle(env, robot_handle, 'body_leftWheel')
+rwh = gym.find_actor_dof_handle(env, robot_handle, 'body_rightWheel')
 
 
 i = 0
@@ -207,8 +216,8 @@ while not gym.query_viewer_has_closed(viewer):
     gym.fetch_results(sim, True)
     
     if i > 60:
-        gym.set_dof_target_velocity(env, lwh, 20.0)
-        gym.set_dof_target_velocity(env, rwh, 20.0)
+        gym.set_dof_target_velocity(env, lwh, 17.0)
+        gym.set_dof_target_velocity(env, rwh, 17.0)
     i += 1
 
     # update the viewer
