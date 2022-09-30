@@ -1,12 +1,16 @@
 import os
-from isaacgymenvs.tasks.base.vec_task import VecTask
-from isaacgym import gymapi, gymtorch
+from typing import Tuple
+
 import numpy as np
+import torch
+from isaacgym import gymapi, gymtorch
+from isaacgymenvs.tasks.base.vec_task import VecTask
+from torch import Tensor
 
 
 def get_cfg():
     cfg = {
-        'n_envs': 1,
+        'n_envs': 2,
         'rl_device': 'cpu',
         'sim_device': 'cuda:0',
         'use_gpu_pipeline': False,
@@ -46,6 +50,8 @@ class VSS3v3(VecTask):
         self.env_total_width = 2
         self.env_total_height = 1.5
         self.robot_max_wheel_rad_s = 68
+        self.field_width = 1.5
+        self.goal_height = 0.4
 
         self.cfg['env']['numActions'] = 2 * (self.n_blue_robots + self.n_yellow_robots)
 
@@ -109,7 +115,17 @@ class VSS3v3(VecTask):
         self.reset_dones()
 
     def compute_rewards_and_dones(self):
-        # TODO
+        self.rew_buf[:], self.reset_buf[:] = compute_vss_reward_and_dones(
+            self.ball_pos,
+            self.robot_pos,
+            self.reset_buf,
+            self.progress_buf,
+            self.max_episode_length,
+            self.field_width,
+            self.goal_height,
+        )
+        self._refresh_tensors()
+
         pass
 
     def compute_observations(self):
@@ -137,7 +153,7 @@ class VSS3v3(VecTask):
         options.density = 1130.0  # 0.046 kg
         color = gymapi.Vec3(1.0, 0.4, 0.0)
         radius = 0.02134
-        pose = gymapi.Transform(p=gymapi.Vec3(0.3, 0.1, radius))
+        pose = gymapi.Transform(p=gymapi.Vec3(0.2, 0.0, radius))
         asset = self.gym.create_sphere(self.sim, radius, options)
         ball = self.gym.create_actor(
             env=env, asset=asset, pose=pose, group=env_id, filter=0b01, name='ball'
@@ -178,10 +194,10 @@ class VSS3v3(VecTask):
         # _width (x), _width (_y), Depth (_z)
         total_width = self.env_total_width
         total_height = self.env_total_height
-        field_width = 1.5
+        field_width = self.field_width
         field_height = 1.3
         goal_width = 0.1
-        goal_height = 0.4
+        goal_height = self.goal_height
         walls_depth = 0.1  # on rules its 0.05
 
         options = gymapi.AssetOptions()
@@ -272,9 +288,10 @@ class VSS3v3(VecTask):
         n_robots = self.n_blue_robots + self.n_yellow_robots
         n_field_actors = 8  # 2 side walls, 4 end walls, 2 goal walls
         self.num_actors = n_balls + n_robots + n_field_actors
-        self.ball = slice(0, n_balls)
-        self.blue_robots = slice(n_balls, n_balls + self.n_blue_robots)
-        self.yellow_robots = slice(n_balls + self.n_blue_robots, n_balls + n_robots)
+        self.ball = 0
+        self.robot = 1
+        # self.blue_robots = slice(n_balls, n_balls + self.n_blue_robots)
+        # self.yellow_robots = slice(n_balls + self.n_blue_robots, n_balls + n_robots)
 
         # shape = (num_envs * num_actors, 13)
         _root_state = self.gym.acquire_actor_root_state_tensor(self.sim)
@@ -283,9 +300,45 @@ class VSS3v3(VecTask):
             self.num_envs, self.num_actors, 13
         )
 
-        self.root_pos = self.root_state[..., 0:3]
+        self.root_pos = self.root_state[..., 0:2]
         self.ball_pos = self.root_pos[:, self.ball, :]
-        self.robot_pos = self.root_pos[:, self.blue_robots, :]
+        self.robot_pos = self.root_pos[:, self.robot, :]
 
     def _refresh_tensors(self):
         self.gym.refresh_actor_root_state_tensor(self.sim)
+
+
+#####################################################################
+###=========================jit functions=========================###
+#####################################################################
+
+
+@torch.jit.script
+def compute_vss_reward_and_dones(
+    ball_pos,
+    robot_pos,
+    reset_buf,
+    progress_buf,
+    max_episode_length,
+    field_lenght,
+    goal_width,
+):
+    # type: (Tensor, Tensor, Tensor, Tensor, float, float, float) -> Tuple[Tensor, Tensor]
+
+    ones = torch.ones_like(reset_buf)
+    reward = torch.ones_like(reset_buf)
+
+    # Check for goal
+    is_goal = (torch.abs(ball_pos[:, 0]) > (field_lenght / 2)) & (
+        torch.abs(ball_pos[:, 1]) < (goal_width / 2)
+    )
+    is_goal_blue = is_goal & (ball_pos[..., 0] > 0)
+    is_goal_yellow = is_goal & (ball_pos[..., 0] < 0)
+
+    ones = torch.ones_like(reset_buf)
+    reset = torch.zeros_like(reset_buf)
+
+    reset = torch.where(is_goal, ones, reset)
+    reset = torch.where(progress_buf >= max_episode_length, ones, reset)
+
+    return reward, reset
