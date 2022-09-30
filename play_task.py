@@ -12,8 +12,14 @@ def play_random_policy():
         )
         return (a - 0.5) * 2
 
+    def constant_value(value):
+        a = torch.ones(
+            (task.num_envs,) + task.action_space.shape, device=task.rl_device
+        )
+        return a * value
+
     while not task.gym.query_viewer_has_closed(task.viewer):
-        task.step(random_vec_actions())
+        task.step(constant_value(0.1))
 
 
 if __name__ == '__main__':

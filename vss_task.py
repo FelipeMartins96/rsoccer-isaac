@@ -1,6 +1,6 @@
 import os
 from isaacgymenvs.tasks.base.vec_task import VecTask
-from isaacgym import gymapi
+from isaacgym import gymapi, gymtorch
 import numpy as np
 
 
@@ -29,6 +29,10 @@ def get_cfg():
         'gravity': [0, 0, -9.81],
     }
 
+    cfg['sim']['physx'] = {
+        'use_gpu': False,
+    }
+
     return cfg
 
 
@@ -41,6 +45,7 @@ class VSS3v3(VecTask):
         self.n_yellow_robots = 0
         self.env_total_width = 2
         self.env_total_height = 1.5
+        self.robot_max_wheel_rad_s = 68
 
         self.cfg['env']['numActions'] = 2 * (self.n_blue_robots + self.n_yellow_robots)
 
@@ -86,8 +91,12 @@ class VSS3v3(VecTask):
                 self._add_robot(_env, i, gymapi.Vec3(0.3, 0.3, 0.0))
             self._add_field(_env, i)
 
-    def pre_physics_step(self, actions):
-        pass
+    def pre_physics_step(self, _actions):
+        actions = _actions.to(self.device)
+        actions = actions * self.robot_max_wheel_rad_s
+        self.gym.set_dof_velocity_target_tensor(
+            self.sim, gymtorch.unwrap_tensor(actions)
+        )
 
     def post_physics_step(self):
         pass
