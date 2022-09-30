@@ -59,6 +59,9 @@ class VSS3v3(VecTask):
             force_render=self.cfg['force_render'],
         )
 
+        self._acquire_tensors()
+        self._refresh_tensors()
+
         if self.viewer != None:
             cam_pos = gymapi.Vec3(0.0, -0.2, 4)
             cam_target = gymapi.Vec3(0.0, 0.0, 0.0)
@@ -260,3 +263,29 @@ class VSS3v3(VecTask):
         add_side_walls()
         add_end_walls()
         add_goal_walls()
+
+    def _acquire_tensors(self):
+        """Acquire and wrap tensors. Create views."""
+        # TODO: working only for one robot
+
+        n_balls = 1
+        n_robots = self.n_blue_robots + self.n_yellow_robots
+        n_field_actors = 8  # 2 side walls, 4 end walls, 2 goal walls
+        self.num_actors = n_balls + n_robots + n_field_actors
+        self.ball = slice(0, n_balls)
+        self.blue_robots = slice(n_balls, n_balls + self.n_blue_robots)
+        self.yellow_robots = slice(n_balls + self.n_blue_robots, n_balls + n_robots)
+
+        # shape = (num_envs * num_actors, 13)
+        _root_state = self.gym.acquire_actor_root_state_tensor(self.sim)
+
+        self.root_state = gymtorch.wrap_tensor(_root_state).view(
+            self.num_envs, self.num_actors, 13
+        )
+
+        self.root_pos = self.root_state[..., 0:3]
+        self.ball_pos = self.root_pos[:, self.ball, :]
+        self.robot_pos = self.root_pos[:, self.blue_robots, :]
+
+    def _refresh_tensors(self):
+        self.gym.refresh_actor_root_state_tensor(self.sim)
