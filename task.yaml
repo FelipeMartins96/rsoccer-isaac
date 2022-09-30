@@ -1,9 +1,0 @@
-n_envs: 1
-rl_device: 'cuda:0'
-sim_device: 'cuda:0'
-use_gpu_pipeline: False
-graphics_device_id: 0
-headless: False
-virtual_screen_capture: False
-force_render: True
-physics_engine: 'physx'

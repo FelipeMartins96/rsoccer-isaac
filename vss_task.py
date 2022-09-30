@@ -4,30 +4,45 @@ from isaacgym import gymapi
 import numpy as np
 
 
-def _parse_cfg(cfg):
-    cfg['env'] = {}
-    cfg['env']['numEnvs'] = cfg['n_envs']
-    cfg['env']['numObservations'] = 0
-    cfg['env']['numActions'] = 0
+def get_cfg():
+    cfg = {
+        'n_envs': 1,
+        'rl_device': 'cuda:0',
+        'sim_device': 'cuda:0',
+        'use_gpu_pipeline': False,
+        'graphics_device_id': 0,
+        'headless': False,
+        'virtual_screen_capture': False,
+        'force_render': True,
+        'physics_engine': 'physx',
+    }
 
-    cfg['sim'] = {}
-    cfg['sim']['use_gpu_pipeline'] = cfg['use_gpu_pipeline']
-    cfg['sim']['up_axis'] = 'z'
-    cfg['sim']['dt'] = 1 / 50
-    cfg['sim']['gravity'] = [0, 0, -9.81]
+    cfg['env'] = {
+        'numEnvs': cfg['n_envs'],
+        'numObservations': 0,
+    }
+
+    cfg['sim'] = {
+        'use_gpu_pipeline': cfg['use_gpu_pipeline'],
+        'up_axis': 'z',
+        'dt': 1 / 50,
+        'gravity': [0, 0, -9.81],
+    }
 
     return cfg
 
 
 class VSS3v3(VecTask):
-    def __init__(self, cfg):
-        self.cfg = _parse_cfg(cfg)
+    def __init__(self):
+        self.cfg = get_cfg()
         self.max_episode_length = 500
 
         self.n_blue_robots = 1
         self.n_yellow_robots = 0
         self.env_total_width = 2
         self.env_total_height = 1.5
+
+        self.cfg['env']['numActions'] = 2 * (self.n_blue_robots + self.n_yellow_robots)
 
         super().__init__(
             config=self.cfg,
