@@ -8,6 +8,9 @@ RUN apt-get update \
 
 WORKDIR /opt
 
+RUN pip install --upgrade pip & \
+    pip install black
+
 RUN git clone \
     https://github.com/NVIDIA-Omniverse/IsaacGymEnvs.git && \
     cd IsaacGymEnvs && \
