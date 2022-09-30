@@ -7,7 +7,7 @@ import numpy as np
 def get_cfg():
     cfg = {
         'n_envs': 1,
-        'rl_device': 'cuda:0',
+        'rl_device': 'cpu',
         'sim_device': 'cuda:0',
         'use_gpu_pipeline': False,
         'graphics_device_id': 0,
@@ -99,6 +99,22 @@ class VSS3v3(VecTask):
         )
 
     def post_physics_step(self):
+        self.progress_buf += 1
+
+        self.compute_rewards_and_dones()
+        self.compute_observations()
+        self.reset_dones()
+
+    def compute_rewards_and_dones(self):
+        # TODO
+        pass
+
+    def compute_observations(self):
+        # TODO
+        pass
+
+    def reset_dones(self):
+        # TODO
         pass
 
     def _add_ground(self):
@@ -121,7 +137,7 @@ class VSS3v3(VecTask):
         pose = gymapi.Transform(p=gymapi.Vec3(0.3, 0.1, radius))
         asset = self.gym.create_sphere(self.sim, radius, options)
         ball = self.gym.create_actor(
-            env=env, asset=asset, pose=pose, group=env_id, filter=0b01
+            env=env, asset=asset, pose=pose, group=env_id, filter=0b01, name='ball'
         )
         self.gym.set_rigid_body_color(env, ball, 0, gymapi.MESH_VISUAL, color)
 
