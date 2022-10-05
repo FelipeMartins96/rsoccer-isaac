@@ -6,6 +6,7 @@ import torch
 from isaacgym import gymapi, gymtorch
 from isaacgymenvs.tasks.base.vec_task import VecTask
 from torch import Tensor
+from isaacgym.torch_utils import torch_rand_float, quat_from_angle_axis
 
 
 def get_cfg():
@@ -43,7 +44,7 @@ def get_cfg():
 class VSS3v3(VecTask):
     def __init__(self):
         self.cfg = get_cfg()
-        self.max_episode_length = 500
+        self.max_episode_length = 30
 
         self.n_blue_robots = 1
         self.n_yellow_robots = 0
@@ -51,6 +52,7 @@ class VSS3v3(VecTask):
         self.env_total_height = 1.5
         self.robot_max_wheel_rad_s = 68
         self.field_width = 1.5
+        self.field_height = 1.3
         self.goal_height = 0.4
 
         self.cfg['env']['numActions'] = 2 * (self.n_blue_robots + self.n_yellow_robots)
@@ -101,6 +103,10 @@ class VSS3v3(VecTask):
             self._add_field(_env, i)
 
     def pre_physics_step(self, _actions):
+        # reset progress_buf for envs reseted on previous step
+        env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
+        self.progress_buf[env_ids] = 0
+
         actions = _actions.to(self.device)
         actions = actions * self.robot_max_wheel_rad_s
         self.gym.set_dof_velocity_target_tensor(
@@ -111,8 +117,8 @@ class VSS3v3(VecTask):
         self.progress_buf += 1
 
         self.compute_rewards_and_dones()
-        self.compute_observations()
         self.reset_dones()
+        self.compute_observations()
 
     def compute_rewards_and_dones(self):
         self.rew_buf[:], self.reset_buf[:] = compute_vss_reward_and_dones(
@@ -126,15 +132,36 @@ class VSS3v3(VecTask):
         )
         self._refresh_tensors()
 
-        pass
-
     def compute_observations(self):
         # TODO
         pass
 
     def reset_dones(self):
-        # TODO
-        pass
+        env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
+
+        if len(env_ids) > 0:
+            # Reset env state
+            self.root_state[env_ids] = self.env_reset_root_state
+
+            # randomize positions
+            rand_pos = (
+                torch.rand((len(env_ids), 2, 2), dtype=torch.float, device=self.device)
+                - 0.5
+            ) * self.field_scale
+            self.ball_pos[env_ids] = rand_pos[:, 0]
+            self.robot_pos[env_ids] = rand_pos[:, 1]
+
+            # randomize rotations
+            rand_angles = torch_rand_float(
+                -np.pi, np.pi, (len(env_ids), 1), device=self.device
+            )
+            self.robot_rotation[env_ids] = quat_from_angle_axis(
+                rand_angles[:, 0], self.z_axis
+            )
+
+            self.gym.set_actor_root_state_tensor(
+                self.sim, gymtorch.unwrap_tensor(self.root_state)
+            )
 
     def _add_ground(self):
         pp = gymapi.PlaneParams()
@@ -282,6 +309,13 @@ class VSS3v3(VecTask):
 
     def _acquire_tensors(self):
         """Acquire and wrap tensors. Create views."""
+
+        self.field_scale = torch.tensor(
+            [self.field_width, self.field_height],
+            dtype=torch.float,
+            device=self.device,
+            requires_grad=False,
+        )
         # TODO: working only for one robot
 
         n_balls = 1
@@ -301,8 +335,17 @@ class VSS3v3(VecTask):
         )
 
         self.root_pos = self.root_state[..., 0:2]
-        self.ball_pos = self.root_pos[:, self.ball, :]
         self.robot_pos = self.root_pos[:, self.robot, :]
+        self.ball_pos = self.root_pos[:, self.ball, :]
+
+        self.root_rotation = self.root_state[..., 3:7]
+        self.robot_rotation = self.root_rotation[:, self.robot, :]
+
+        self._refresh_tensors()
+        self.env_reset_root_state = self.root_state.clone()
+        self.z_axis = torch.tensor(
+            [0.0, 0.0, 1.0], dtype=torch.float, device=self.device, requires_grad=False
+        )
 
     def _refresh_tensors(self):
         self.gym.refresh_actor_root_state_tensor(self.sim)
@@ -332,8 +375,8 @@ def compute_vss_reward_and_dones(
     is_goal = (torch.abs(ball_pos[:, 0]) > (field_lenght / 2)) & (
         torch.abs(ball_pos[:, 1]) < (goal_width / 2)
     )
-    is_goal_blue = is_goal & (ball_pos[..., 0] > 0)
-    is_goal_yellow = is_goal & (ball_pos[..., 0] < 0)
+    # is_goal_blue = is_goal & (ball_pos[..., 0] > 0)
+    # is_goal_yellow = is_goal & (ball_pos[..., 0] < 0)
 
     ones = torch.ones_like(reset_buf)
     reset = torch.zeros_like(reset_buf)
