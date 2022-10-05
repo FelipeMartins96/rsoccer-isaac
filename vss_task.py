@@ -24,7 +24,6 @@ def get_cfg():
 
     cfg['env'] = {
         'numEnvs': cfg['n_envs'],
-        'numObservations': 0,
     }
 
     cfg['sim'] = {
@@ -56,6 +55,9 @@ class VSS3v3(VecTask):
         self.goal_height = 0.4
 
         self.cfg['env']['numActions'] = 2 * (self.n_blue_robots + self.n_yellow_robots)
+        self.cfg['env']['numObservations'] = (
+            4 + (self.n_blue_robots + self.n_yellow_robots) * 13
+        )
 
         super().__init__(
             config=self.cfg,
@@ -138,8 +140,9 @@ class VSS3v3(VecTask):
         self._refresh_tensors()
 
     def compute_observations(self):
-        # TODO
-        pass
+        self.obs_buf[..., :2] = self.ball_pos
+        self.obs_buf[..., 2:4] = self.ball_vel
+        self.obs_buf[..., 4:] = self.robot_state
 
     def reset_dones(self):
         env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
@@ -338,6 +341,7 @@ class VSS3v3(VecTask):
         self.root_state = gymtorch.wrap_tensor(_root_state).view(
             self.num_envs, self.num_actors, 13
         )
+        self.robot_state = self.root_state[:, self.robot, :]
 
         self.root_pos = self.root_state[..., 0:2]
         self.robot_pos = self.root_pos[:, self.robot, :]
@@ -345,6 +349,10 @@ class VSS3v3(VecTask):
 
         self.root_rotation = self.root_state[..., 3:7]
         self.robot_rotation = self.root_rotation[:, self.robot, :]
+
+        self.root_vel = self.root_state[..., 7:9]
+        self.robot_vel = self.root_vel[:, self.robot, :]
+        self.ball_vel = self.root_vel[:, self.ball, :]
 
         self._refresh_tensors()
         self.env_reset_root_state = self.root_state.clone()
