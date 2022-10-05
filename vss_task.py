@@ -117,6 +117,11 @@ class VSS3v3(VecTask):
         self.progress_buf += 1
 
         self.compute_rewards_and_dones()
+
+        # Save observations previously to resets
+        self.compute_observations()
+        self.extras["terminal_observation"] = self.obs_buf.clone().to(self.rl_device)
+
         self.reset_dones()
         self.compute_observations()
 
