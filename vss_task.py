@@ -128,14 +128,12 @@ class VSS3v3(VecTask):
         self.compute_observations()
 
     def compute_rewards_and_dones(self):
-        pre_rew, self.reset_buf[:] = compute_vss_reward_and_dones(
+        pre_rew = compute_vss_rewards(
             self.ball_pos,
             self.robot_pos,
             self.actions,
-            self.reset_buf,
-            self.progress_buf,
+            self.rew_buf,
             self.yellow_goal,
-            self.max_episode_length,
             self.field_width,
             self.goal_height,
             1.0,
@@ -144,14 +142,12 @@ class VSS3v3(VecTask):
             1.0,
         )
         self._refresh_tensors()
-        self.rew_buf[:], self.reset_buf[:] = compute_vss_reward_and_dones(
+        self.rew_buf[:] = compute_vss_rewards(
             self.ball_pos,
             self.robot_pos,
             self.actions * 0,
-            self.reset_buf,
-            self.progress_buf,
+            self.rew_buf,
             self.yellow_goal,
-            self.max_episode_length,
             self.field_width,
             self.goal_height,
             1.0,
@@ -161,6 +157,15 @@ class VSS3v3(VecTask):
         )
 
         self.rew_buf = self.rew_buf - pre_rew
+
+        self.reset_buf = compute_vss_dones(
+            ball_pos=self.ball_pos,
+            reset_buf=self.reset_buf,
+            progress_buf=self.progress_buf,
+            max_episode_length=self.max_episode_length,
+            field_width=self.field_width,
+            goal_height=self.goal_height,
+        )
 
     def compute_observations(self):
         self.obs_buf[..., :2] = self.ball_pos
@@ -399,30 +404,28 @@ class VSS3v3(VecTask):
 
 
 @torch.jit.script
-def compute_vss_reward_and_dones(
+def compute_vss_rewards(
     ball_pos,
     robot_pos,
     actions,
-    reset_buf,
-    progress_buf,
+    rew_buf,
     yellow_goal,
-    max_episode_length,
-    field_lenght,
-    goal_width,
+    field_width,
+    goal_height,
     goal_w,
     move_w,
     grad_w,
     energy_w,
 ):
-    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, float, float, float, float, float, float, float) -> Tuple[Tensor, Tensor]
+    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, float, float, float, float, float, float) -> Tensor
     # Negative what we want to reduce, Positive what we want to increase
 
-    zeros = torch.zeros_like(reset_buf)
-    ones = torch.ones_like(reset_buf)
+    zeros = torch.zeros_like(rew_buf)
+    ones = torch.ones_like(rew_buf)
 
     # GOAL
-    is_goal = (torch.abs(ball_pos[:, 0]) > (field_lenght / 2)) & (
-        torch.abs(ball_pos[:, 1]) < (goal_width / 2)
+    is_goal = (torch.abs(ball_pos[:, 0]) > (field_width / 2)) & (
+        torch.abs(ball_pos[:, 1]) < (goal_height / 2)
     )
     is_goal_blue = is_goal & (ball_pos[..., 0] > 0)
     is_goal_yellow = is_goal & (ball_pos[..., 0] < 0)
@@ -446,10 +449,29 @@ def compute_vss_reward_and_dones(
         + energy * energy_w
     )
 
+    return reward
+
+
+@torch.jit.script
+def compute_vss_dones(
+    ball_pos,
+    reset_buf,
+    progress_buf,
+    max_episode_length,
+    field_width,
+    goal_height,
+):
+    # type: (Tensor, Tensor, Tensor, float, float, float) -> Tensor
+
+    # CHECK GOAL
+    is_goal = (torch.abs(ball_pos[:, 0]) > (field_width / 2)) & (
+        torch.abs(ball_pos[:, 1]) < (goal_height / 2)
+    )
+
     ones = torch.ones_like(reset_buf)
     reset = torch.zeros_like(reset_buf)
 
     reset = torch.where(is_goal, ones, reset)
     reset = torch.where(progress_buf >= max_episode_length, ones, reset)
 
-    return reward, reset
+    return reset
