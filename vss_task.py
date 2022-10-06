@@ -100,9 +100,9 @@ class VSS3v3(VecTask):
             )
 
             self._add_ball(_env, i)
-            for j in range(self.n_blue_robots):
+            for _ in range(self.n_blue_robots):
                 self._add_robot(_env, i, gymapi.Vec3(0.0, 0.0, 0.3))
-            for i in range(self.n_yellow_robots):
+            for _ in range(self.n_yellow_robots):
                 self._add_robot(_env, i, gymapi.Vec3(0.3, 0.3, 0.0))
             self._add_field(_env, i)
 
