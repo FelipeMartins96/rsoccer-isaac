@@ -425,7 +425,7 @@ def compute_vss_reward_and_dones(
     is_goal_blue = is_goal & (ball_pos[..., 0] > 0)
     is_goal_yellow = is_goal & (ball_pos[..., 0] < 0)
     goal_rw = torch.where(is_goal_blue, ones, zeros)
-    goal_rw = -torch.where(is_goal_yellow, ones, goal_rw)
+    goal_rw = torch.where(is_goal_yellow, -ones, goal_rw)
 
     # MOVE
     dist_robot_ball = -torch.norm(robot_pos - ball_pos, dim=1)
