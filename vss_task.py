@@ -11,7 +11,7 @@ from isaacgym.torch_utils import torch_rand_float, quat_from_angle_axis
 
 def get_cfg():
     cfg = {
-        'n_envs': 2,
+        'n_envs': 1,
         'rl_device': 'cpu',
         'sim_device': 'cuda:0',
         'use_gpu_pipeline': False,
@@ -29,7 +29,7 @@ def get_cfg():
     cfg['sim'] = {
         'use_gpu_pipeline': cfg['use_gpu_pipeline'],
         'up_axis': 'z',
-        'dt': 1 / 50,
+        'dt': 1 / 25,
         'gravity': [0, 0, -9.81],
     }
 
@@ -43,7 +43,7 @@ def get_cfg():
 class VSS3v3(VecTask):
     def __init__(self):
         self.cfg = get_cfg()
-        self.max_episode_length = 30
+        self.max_episode_length = 1000
 
         self.n_blue_robots = 1
         self.n_yellow_robots = 0
@@ -128,7 +128,8 @@ class VSS3v3(VecTask):
         self.compute_observations()
 
     def compute_rewards_and_dones(self):
-        pre_rew = compute_vss_rewards(
+        # goal, grad, energy, move
+        _, p_grad, _, p_move = compute_vss_rewards(
             self.ball_pos,
             self.robot_pos,
             self.actions,
@@ -136,27 +137,19 @@ class VSS3v3(VecTask):
             self.yellow_goal,
             self.field_width,
             self.goal_height,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
         )
         self._refresh_tensors()
-        self.rew_buf[:] = compute_vss_rewards(
+        goal, grad, energy, move = compute_vss_rewards(
             self.ball_pos,
             self.robot_pos,
-            self.actions * 0,
+            self.actions,
             self.rew_buf,
             self.yellow_goal,
             self.field_width,
             self.goal_height,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
         )
 
-        self.rew_buf = self.rew_buf - pre_rew
+        self.rew_buf = goal + (grad - p_grad) + energy + (move - p_move)
 
         self.reset_buf = compute_vss_dones(
             ball_pos=self.ball_pos,
@@ -405,51 +398,36 @@ class VSS3v3(VecTask):
 
 @torch.jit.script
 def compute_vss_rewards(
-    ball_pos,
-    robot_pos,
-    actions,
-    rew_buf,
-    yellow_goal,
-    field_width,
-    goal_height,
-    goal_w,
-    move_w,
-    grad_w,
-    energy_w,
+    ball_pos, robot_pos, actions, rew_buf, yellow_goal, field_width, goal_height
 ):
-    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, float, float, float, float, float, float) -> Tensor
+    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, float, float) -> Tuple[Tensor, Tensor, Tensor, Tensor]
     # Negative what we want to reduce, Positive what we want to increase
 
     zeros = torch.zeros_like(rew_buf)
     ones = torch.ones_like(rew_buf)
 
-    # GOAL
+    # GOAL (yellow_goal = -1, no_goal = 0, blue_goal = 1)
     is_goal = (torch.abs(ball_pos[:, 0]) > (field_width / 2)) & (
         torch.abs(ball_pos[:, 1]) < (goal_height / 2)
     )
     is_goal_blue = is_goal & (ball_pos[..., 0] > 0)
     is_goal_yellow = is_goal & (ball_pos[..., 0] < 0)
-    goal_rw = torch.where(is_goal_blue, ones, zeros)
-    goal_rw = torch.where(is_goal_yellow, -ones, goal_rw)
+    goal = torch.where(is_goal_blue, ones, zeros)
+    goal = torch.where(is_goal_yellow, -ones, goal)
 
     # MOVE
-    dist_robot_ball = -torch.norm(robot_pos - ball_pos, dim=1)
+    move = -torch.norm(robot_pos - ball_pos, dim=1)
 
     # GRAD
     dist_ball_left_goal = torch.norm(ball_pos - (-yellow_goal), dim=1)
-    dist_ball_right_goal = -torch.norm(ball_pos - yellow_goal, dim=1)
+    dist_ball_right_goal = torch.norm(ball_pos - yellow_goal, dim=1)
+    grad = dist_ball_left_goal - dist_ball_right_goal
 
     # ENERGY
-    energy = torch.sum(torch.abs(actions), dim=1)
+    energy = -torch.sum(torch.abs(actions), dim=1)
 
-    reward = (
-        goal_rw * goal_w
-        + dist_robot_ball * move_w
-        + (dist_ball_left_goal + dist_ball_right_goal) * grad_w
-        + energy * energy_w
-    )
-
-    return reward
+    # goal, grad, energy, move
+    return goal, grad, energy, move
 
 
 @torch.jit.script
