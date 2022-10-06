@@ -131,7 +131,7 @@ class VSS3v3(VecTask):
         pre_rew, self.reset_buf[:] = compute_vss_reward_and_dones(
             self.ball_pos,
             self.robot_pos,
-            self.actions * 0,
+            self.actions,
             self.reset_buf,
             self.progress_buf,
             self.yellow_goal,
