@@ -71,6 +71,8 @@ class VSS3v3(VecTask):
 
         self._acquire_tensors()
         self._refresh_tensors()
+        self.reset_dones()
+        self.compute_observations()
 
         if self.viewer != None:
             cam_pos = gymapi.Vec3(0.0, -0.2, 4)
