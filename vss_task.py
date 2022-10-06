@@ -109,11 +109,9 @@ class VSS3v3(VecTask):
         env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
         self.progress_buf[env_ids] = 0
 
-        actions = _actions.to(self.device)
-        actions = actions * self.robot_max_wheel_rad_s
-        self.gym.set_dof_velocity_target_tensor(
-            self.sim, gymtorch.unwrap_tensor(actions)
-        )
+        self.actions = _actions.to(self.device)
+        act = self.actions * self.robot_max_wheel_rad_s
+        self.gym.set_dof_velocity_target_tensor(self.sim, gymtorch.unwrap_tensor(act))
 
     def post_physics_step(self):
         self.progress_buf += 1
@@ -128,16 +126,39 @@ class VSS3v3(VecTask):
         self.compute_observations()
 
     def compute_rewards_and_dones(self):
-        self.rew_buf[:], self.reset_buf[:] = compute_vss_reward_and_dones(
+        pre_rew, self.reset_buf[:] = compute_vss_reward_and_dones(
             self.ball_pos,
             self.robot_pos,
+            self.actions * 0,
             self.reset_buf,
             self.progress_buf,
+            self.yellow_goal,
             self.max_episode_length,
             self.field_width,
             self.goal_height,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
         )
         self._refresh_tensors()
+        self.rew_buf[:], self.reset_buf[:] = compute_vss_reward_and_dones(
+            self.ball_pos,
+            self.robot_pos,
+            self.actions * 0,
+            self.reset_buf,
+            self.progress_buf,
+            self.yellow_goal,
+            self.max_episode_length,
+            self.field_width,
+            self.goal_height,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+        )
+
+        self.rew_buf = self.rew_buf - pre_rew
 
     def compute_observations(self):
         self.obs_buf[..., :2] = self.ball_pos
@@ -359,6 +380,12 @@ class VSS3v3(VecTask):
         self.z_axis = torch.tensor(
             [0.0, 0.0, 1.0], dtype=torch.float, device=self.device, requires_grad=False
         )
+        self.yellow_goal = torch.tensor(
+            [self.field_width / 2, 0.0],
+            dtype=torch.float,
+            device=self.device,
+            requires_grad=False,
+        )
 
     def _refresh_tensors(self):
         self.gym.refresh_actor_root_state_tensor(self.sim)
@@ -373,23 +400,49 @@ class VSS3v3(VecTask):
 def compute_vss_reward_and_dones(
     ball_pos,
     robot_pos,
+    actions,
     reset_buf,
     progress_buf,
+    yellow_goal,
     max_episode_length,
     field_lenght,
     goal_width,
+    goal_w,
+    move_w,
+    grad_w,
+    energy_w,
 ):
-    # type: (Tensor, Tensor, Tensor, Tensor, float, float, float) -> Tuple[Tensor, Tensor]
+    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, float, float, float, float, float, float, float) -> Tuple[Tensor, Tensor]
+    # Negative what we want to reduce, Positive what we want to increase
 
+    zeros = torch.zeros_like(reset_buf)
     ones = torch.ones_like(reset_buf)
-    reward = torch.ones_like(reset_buf)
 
-    # Check for goal
+    # GOAL
     is_goal = (torch.abs(ball_pos[:, 0]) > (field_lenght / 2)) & (
         torch.abs(ball_pos[:, 1]) < (goal_width / 2)
     )
-    # is_goal_blue = is_goal & (ball_pos[..., 0] > 0)
-    # is_goal_yellow = is_goal & (ball_pos[..., 0] < 0)
+    is_goal_blue = is_goal & (ball_pos[..., 0] > 0)
+    is_goal_yellow = is_goal & (ball_pos[..., 0] < 0)
+    goal_rw = torch.where(is_goal_blue, ones, zeros)
+    goal_rw = -torch.where(is_goal_yellow, ones, goal_rw)
+
+    # MOVE
+    dist_robot_ball = -torch.norm(robot_pos - ball_pos, dim=1)
+
+    # GRAD
+    dist_ball_left_goal = torch.norm(ball_pos - (-yellow_goal), dim=1)
+    dist_ball_right_goal = -torch.norm(ball_pos - yellow_goal, dim=1)
+
+    # ENERGY
+    energy = torch.sum(torch.abs(actions), dim=1)
+
+    reward = (
+        goal_rw * goal_w
+        + dist_robot_ball * move_w
+        + (dist_ball_left_goal + dist_ball_right_goal) * grad_w
+        + energy * energy_w
+    )
 
     ones = torch.ones_like(reset_buf)
     reset = torch.zeros_like(reset_buf)
