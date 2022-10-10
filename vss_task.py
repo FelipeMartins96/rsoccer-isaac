@@ -402,7 +402,7 @@ class VSS3v3(VecTask):
         self.ball_vel = self.root_vel[:, self.ball, :]
 
         self._refresh_tensors()
-        self.env_reset_root_state = self.root_state.clone()
+        self.env_reset_root_state = self.root_state[0].clone()
         self.z_axis = torch.tensor(
             [0.0, 0.0, 1.0], dtype=torch.float, device=self.device, requires_grad=False
         )
