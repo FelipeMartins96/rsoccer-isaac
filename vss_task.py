@@ -11,7 +11,7 @@ from isaacgym.torch_utils import torch_rand_float, quat_from_angle_axis
 
 def get_cfg():
     cfg = {
-        'n_envs': 1,
+        'n_envs': 2,
         'rl_device': 'cpu',
         'sim_device': 'cuda:0',
         'use_gpu_pipeline': False,
@@ -43,7 +43,7 @@ def get_cfg():
 class VSS3v3(VecTask):
     def __init__(self):
         self.cfg = get_cfg()
-        self.max_episode_length = 1000
+        self.max_episode_length = 50
 
         self.n_blue_robots = 1
         self.n_yellow_robots = 0
@@ -53,6 +53,11 @@ class VSS3v3(VecTask):
         self.field_width = 1.5
         self.field_height = 1.3
         self.goal_height = 0.4
+
+        self.w_goal = 1
+        self.w_grad = 1
+        self.w_energy = 1
+        self.w_move = 1
 
         self.cfg['env']['numActions'] = 2 * (self.n_blue_robots + self.n_yellow_robots)
         self.cfg['env']['numObservations'] = (
@@ -123,6 +128,12 @@ class VSS3v3(VecTask):
         # Save observations previously to resets
         self.compute_observations()
         self.extras["terminal_observation"] = self.obs_buf.clone().to(self.rl_device)
+        self.extras["terminal_rewards"] = {
+            "goal": self.rw_goal.clone().to(self.rl_device),
+            "grad": self.rw_grad.clone().to(self.rl_device),
+            "energy": self.rw_energy.clone().to(self.rl_device),
+            "move": self.rw_move.clone().to(self.rl_device),
+        }
 
         self.reset_dones()
         self.compute_observations()
@@ -149,7 +160,17 @@ class VSS3v3(VecTask):
             self.goal_height,
         )
 
-        self.rew_buf = goal + (grad - p_grad) + energy + (move - p_move)
+        goal_rw = self.w_goal * goal
+        grad_rw = self.w_grad * (grad - p_grad)
+        energy_rw = self.w_energy * energy
+        move_rw = self.w_move * (move - p_move)
+
+        self.rw_goal += goal_rw
+        self.rw_grad += grad_rw
+        self.rw_energy += energy_rw
+        self.rw_move += move_rw
+
+        self.rew_buf = goal_rw + grad_rw + energy_rw + move_rw
 
         self.reset_buf = compute_vss_dones(
             ball_pos=self.ball_pos,
@@ -191,6 +212,11 @@ class VSS3v3(VecTask):
             self.gym.set_actor_root_state_tensor(
                 self.sim, gymtorch.unwrap_tensor(self.root_state)
             )
+
+            self.rw_goal[env_ids] = 0.0
+            self.rw_grad[env_ids] = 0.0
+            self.rw_energy[env_ids] = 0.0
+            self.rw_move[env_ids] = 0.0
 
     def _add_ground(self):
         pp = gymapi.PlaneParams()
@@ -385,6 +411,19 @@ class VSS3v3(VecTask):
             dtype=torch.float,
             device=self.device,
             requires_grad=False,
+        )
+
+        self.rw_goal = torch.zeros_like(
+            self.rew_buf, device=self.device, requires_grad=False
+        )
+        self.rw_grad = torch.zeros_like(
+            self.rew_buf, device=self.device, requires_grad=False
+        )
+        self.rw_energy = torch.zeros_like(
+            self.rew_buf, device=self.device, requires_grad=False
+        )
+        self.rw_move = torch.zeros_like(
+            self.rew_buf, device=self.device, requires_grad=False
         )
 
     def _refresh_tensors(self):
