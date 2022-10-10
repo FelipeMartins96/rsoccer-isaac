@@ -11,10 +11,10 @@ from isaacgym.torch_utils import torch_rand_float, quat_from_angle_axis
 
 def get_cfg():
     cfg = {
-        'n_envs': 2,
-        'rl_device': 'cpu',
+        'n_envs': 4096,
+        'rl_device': 'cuda:0',
         'sim_device': 'cuda:0',
-        'use_gpu_pipeline': False,
+        'use_gpu_pipeline': True,
         'graphics_device_id': 0,
         'headless': False,
         'virtual_screen_capture': False,
@@ -34,7 +34,7 @@ def get_cfg():
     }
 
     cfg['sim']['physx'] = {
-        'use_gpu': False,
+        'use_gpu': True,
     }
 
     return cfg
@@ -43,7 +43,7 @@ def get_cfg():
 class VSS3v3(VecTask):
     def __init__(self):
         self.cfg = get_cfg()
-        self.max_episode_length = 50
+        self.max_episode_length = 1000
 
         self.n_blue_robots = 1
         self.n_yellow_robots = 0
@@ -54,9 +54,9 @@ class VSS3v3(VecTask):
         self.field_height = 1.3
         self.goal_height = 0.4
 
-        self.w_goal = 1
-        self.w_grad = 1
-        self.w_energy = 1
+        self.w_goal = 5
+        self.w_grad = 2
+        self.w_energy = 1 / 2000
         self.w_move = 1
 
         self.cfg['env']['numActions'] = 2 * (self.n_blue_robots + self.n_yellow_robots)
