@@ -134,6 +134,9 @@ class VSS3v3(VecTask):
             "energy": self.rw_energy.clone().to(self.rl_device),
             "move": self.rw_move.clone().to(self.rl_device),
         }
+        self.extras["progress_buffer"] = (
+            self.progress_buf.clone().to(self.rl_device).float()
+        )
 
         self.reset_dones()
         self.compute_observations()
