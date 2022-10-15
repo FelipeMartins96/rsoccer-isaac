@@ -31,10 +31,14 @@ def get_cfg():
         'up_axis': 'z',
         'dt': 1 / 25,
         'gravity': [0, 0, -9.81],
+        'substeps': 3,
     }
 
     cfg['sim']['physx'] = {
         'use_gpu': True,
+        'bounce_threshold_velocity': 0.1,
+        'contact_offset': 0.01,
+        'max_depenetration_velocity': 10.0,
     }
 
     return cfg
@@ -224,13 +228,13 @@ class VSS3v3(VecTask):
     def _add_ground(self):
         pp = gymapi.PlaneParams()
         pp.distance = 0.0
-        pp.dynamic_friction = 1.0
+        pp.dynamic_friction = 0.4
         pp.normal = gymapi.Vec3(
             0, 0, 1
         )  # defaultgymapi.Vec3(0.000000, 1.000000, 0.000000)
         pp.restitution = 0.0
         pp.segmentation_id = 0
-        pp.static_friction = 1.0
+        pp.static_friction = 0.7
         self.gym.add_ground(self.sim, pp)
 
     def _add_ball(self, env, env_id):
@@ -255,7 +259,7 @@ class VSS3v3(VecTask):
             options=options,
         )
         body, left_wheel, right_wheel = 0, 1, 2
-        initial_height = 0.028  # _z dimension
+        initial_height = 0.022  # _z dimension
         pose = gymapi.Transform(p=gymapi.Vec3(0, 0.0, initial_height))
         robot = self.gym.create_actor(
             env=env, asset=rbt_asset, pose=pose, group=env_id, filter=0b00, name='robot'
@@ -265,13 +269,15 @@ class VSS3v3(VecTask):
         props[body].friction = 0.0
         props[body].filter = 0b0
         props[left_wheel].filter = 0b11
+        props[left_wheel].friction = 0.7
         props[right_wheel].filter = 0b11
+        props[right_wheel].friction = 0.7
         self.gym.set_actor_rigid_shape_properties(env, robot, props)
 
         props = self.gym.get_actor_dof_properties(env, robot)
         props["driveMode"].fill(gymapi.DOF_MODE_VEL)
         props["stiffness"].fill(0.0)
-        props["damping"].fill(200.0)
+        props["damping"].fill(100.0)
         self.gym.set_actor_dof_properties(env, robot, props)
 
     def _add_field(self, env, env_id):
