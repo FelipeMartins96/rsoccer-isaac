@@ -13,6 +13,7 @@ from torch.utils.tensorboard import SummaryWriter
 from isaacgymenvs.learning.replay_buffer import ReplayBuffer
 from vss_task import VSS3v3
 
+
 class Actor(nn.Module):
     def __init__(self, env):
         super().__init__()
@@ -32,10 +33,10 @@ class Actor(nn.Module):
 task = VSS3v3()
 
 actor = Actor(task)
-actor.load_state_dict(torch.load('actor.pt'))
-obs = task.reset()['obs'].cpu()
+actor.load_state_dict(torch.load('actor-70.pt'))
+obs = task.reset()['obs'][0].cpu()
 
 # Use torch.jit.trace to generate a torch.jit.ScriptModule via tracing.
 traced_script_module = torch.jit.trace(actor, obs)
 
-traced_script_module.save("traced_actor.pt")
+traced_script_module.save("traced_actor-70.pt")

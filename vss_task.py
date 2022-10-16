@@ -53,7 +53,7 @@ class VSS3v3(VecTask):
         self.n_yellow_robots = 0
         self.env_total_width = 2
         self.env_total_height = 1.5
-        self.robot_max_wheel_rad_s = 68
+        self.robot_max_wheel_rad_s = 70
         self.field_width = 1.5
         self.field_height = 1.3
         self.goal_height = 0.4
