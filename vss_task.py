@@ -6,7 +6,7 @@ import torch
 from isaacgym import gymapi, gymtorch
 from isaacgymenvs.tasks.base.vec_task import VecTask
 from torch import Tensor
-from isaacgym.torch_utils import torch_rand_float, quat_from_angle_axis
+from isaacgym.torch_utils import torch_rand_float, quat_from_angle_axis, get_euler_xyz
 
 
 def get_cfg():
@@ -63,7 +63,7 @@ class VSS3v3(VecTask):
 
         self.cfg['env']['numActions'] = 2 * (self.n_blue_robots + self.n_yellow_robots)
         self.cfg['env']['numObservations'] = (
-            4 + (self.n_blue_robots + self.n_yellow_robots) * 13
+            4 + (self.n_blue_robots + self.n_yellow_robots) * 7
         )
 
         super().__init__(
@@ -189,7 +189,12 @@ class VSS3v3(VecTask):
     def compute_observations(self):
         self.obs_buf[..., :2] = self.ball_pos
         self.obs_buf[..., 2:4] = self.ball_vel
-        self.obs_buf[..., 4:] = self.robot_state
+        self.obs_buf[..., 4:6] = self.robot_pos
+        self.obs_buf[..., 6:8] = self.robot_vel
+        _, _, angle = get_euler_xyz(self.robot_state[..., 3:7])
+        self.obs_buf[..., 8] = torch.cos(angle)
+        self.obs_buf[..., 9] = torch.sin(angle)
+        self.obs_buf[..., 10] = self.robot_state[..., 12]
 
     def reset_dones(self):
         env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
@@ -240,7 +245,7 @@ class VSS3v3(VecTask):
         options.density = 1130.0  # 0.046 kg
         color = gymapi.Vec3(1.0, 0.4, 0.0)
         radius = 0.02134
-        pose = gymapi.Transform(p=gymapi.Vec3(0.2, 0.0, radius))
+        pose = gymapi.Transform(p=gymapi.Vec3(0.0, 0.0, radius))
         asset = self.gym.create_sphere(self.sim, radius, options)
         ball = self.gym.create_actor(
             env=env, asset=asset, pose=pose, group=env_id, filter=0b01, name='ball'
@@ -257,8 +262,8 @@ class VSS3v3(VecTask):
             options=options,
         )
         body, left_wheel, right_wheel = 0, 1, 2
-        initial_height = 0.022  # _z dimension
-        pose = gymapi.Transform(p=gymapi.Vec3(0, 0.0, initial_height))
+        initial_height = 0.024  # _z dimension
+        pose = gymapi.Transform(p=gymapi.Vec3(-0.1, 0.0, initial_height))
         robot = self.gym.create_actor(
             env=env, asset=rbt_asset, pose=pose, group=env_id, filter=0b00, name='robot'
         )
