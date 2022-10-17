@@ -51,7 +51,7 @@ class VSS3v3(VecTask):
         self.n_yellow_robots = 0
         self.env_total_width = 2
         self.env_total_height = 1.5
-        self.robot_max_wheel_rad_s = 150.0
+        self.robot_max_wheel_rad_s = 100.0
         self.field_width = 1.5
         self.field_height = 1.3
         self.goal_height = 0.4
@@ -228,6 +228,7 @@ class VSS3v3(VecTask):
             self.rw_grad[env_ids] = 0.0
             self.rw_energy[env_ids] = 0.0
             self.rw_move[env_ids] = 0.0
+            self.actions[env_ids] *= 0.0
 
     def _add_ground(self):
         pp = gymapi.PlaneParams()

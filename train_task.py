@@ -58,8 +58,8 @@ def train() -> None:
 
     device = task.cfg['rl_device']
     lr = 3e-4
-    total_timesteps = 1000000
-    learning_starts = 25e3
+    total_timesteps = 300000
+    learning_starts = 25e5
     batch_size = 2048
     gamma = 0.99
     tau = 0.005
@@ -92,7 +92,7 @@ def train() -> None:
                 actions = actor(obs['obs'])
                 actions += torch.normal(
                     torch.zeros_like(actions, dtype=torch.float32, device=device),
-                    1.0 * 0.4,
+                    1.0 * 0.3,
                 )
 
         actions = torch.clamp(actions, -1.0, 1.0)
@@ -205,8 +205,12 @@ def train() -> None:
             if global_step % 10000 == 0:
                 torch.save(
                     actor.state_dict(),
-                    f"actor.pt",
+                    f"actor{task.robot_max_wheel_rad_s}.pt",
                 )
+    torch.save(
+        actor.state_dict(),
+        f"actor{task.robot_max_wheel_rad_s}.pt",
+    )
 
 
 if __name__ == "__main__":
