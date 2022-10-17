@@ -59,7 +59,7 @@ def train() -> None:
     device = task.cfg['rl_device']
     lr = 3e-4
     total_timesteps = 300000
-    learning_starts = 25e5
+    learning_starts = 25e4
     batch_size = 2048
     gamma = 0.99
     tau = 0.005
@@ -73,7 +73,7 @@ def train() -> None:
     q_optimizer = optim.Adam(list(qf1.parameters()), lr=lr)
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=lr)
 
-    rb = ReplayBuffer(2000000, device)
+    rb = ReplayBuffer(4000000, device)
     start_time = time.time()
     episodic_return = torch.zeros(task.num_envs, device=device)
     episodic_length = torch.zeros(task.num_envs, device=device)

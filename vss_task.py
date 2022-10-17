@@ -21,13 +21,13 @@ def get_cfg():
     }
 
     cfg['env'] = {
-        'numEnvs': 4096,
+        'numEnvs': 2048,
     }
 
     cfg['sim'] = {
         'use_gpu_pipeline': True,
         'up_axis': 'z',
-        'dt': 1 / 25,
+        'dt': 1 / 20,
         'gravity': [0, 0, -9.81],
         'substeps': 3,
     }
