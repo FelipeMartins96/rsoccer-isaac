@@ -63,7 +63,7 @@ class VSS3v3(VecTask):
 
         self.cfg['env']['numActions'] = 2 * (self.n_blue_robots + self.n_yellow_robots)
         self.cfg['env']['numObservations'] = (
-            4 + (self.n_blue_robots + self.n_yellow_robots) * 7
+            4 + (self.n_blue_robots + self.n_yellow_robots) * 9
         )
 
         super().__init__(
@@ -195,6 +195,7 @@ class VSS3v3(VecTask):
         self.obs_buf[..., 8] = torch.cos(angle)
         self.obs_buf[..., 9] = torch.sin(angle)
         self.obs_buf[..., 10] = self.robot_state[..., 12]
+        self.obs_buf[..., 11:13] = self.actions
 
     def reset_dones(self):
         env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
@@ -437,6 +438,9 @@ class VSS3v3(VecTask):
         )
         self.rw_move = torch.zeros_like(
             self.rew_buf, device=self.device, requires_grad=False
+        )
+        self.actions = torch.zeros(
+            (self.num_envs, self.num_actions), device=self.device, requires_grad=False
         )
 
     def _refresh_tensors(self):
