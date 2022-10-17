@@ -11,10 +11,8 @@ from isaacgym.torch_utils import torch_rand_float, quat_from_angle_axis
 
 def get_cfg():
     cfg = {
-        'n_envs': 4096,
         'rl_device': 'cuda:0',
         'sim_device': 'cuda:0',
-        'use_gpu_pipeline': True,
         'graphics_device_id': 0,
         'headless': False,
         'virtual_screen_capture': False,
@@ -23,11 +21,11 @@ def get_cfg():
     }
 
     cfg['env'] = {
-        'numEnvs': cfg['n_envs'],
+        'numEnvs': 4096,
     }
 
     cfg['sim'] = {
-        'use_gpu_pipeline': cfg['use_gpu_pipeline'],
+        'use_gpu_pipeline': True,
         'up_axis': 'z',
         'dt': 1 / 25,
         'gravity': [0, 0, -9.81],
@@ -53,7 +51,7 @@ class VSS3v3(VecTask):
         self.n_yellow_robots = 0
         self.env_total_width = 2
         self.env_total_height = 1.5
-        self.robot_max_wheel_rad_s = 70
+        self.robot_max_wheel_rad_s = 150.0
         self.field_width = 1.5
         self.field_height = 1.3
         self.goal_height = 0.4
@@ -278,6 +276,7 @@ class VSS3v3(VecTask):
         props["driveMode"].fill(gymapi.DOF_MODE_VEL)
         props["stiffness"].fill(0.0)
         props["damping"].fill(100.0)
+        props['velocity'].fill(self.robot_max_wheel_rad_s)
         self.gym.set_actor_dof_properties(env, robot, props)
 
     def _add_field(self, env, env_id):
