@@ -1,0 +1,112 @@
+# gym.create_sim
+## gymapi.SimParams() file:///home/fbm2/isaac/isaacgym/docs/api/python/struct_py.html#isaacgym.gymapi.SimParams
+## gymapi.PhysXParams() file:///home/fbm2/isaac/isaacgym/docs/api/python/struct_py.html#isaacgym.gymapi.PhysXParams
+
+# gym.add_ground()
+## gymapi.PlaneParams() file:///home/fbm2/isaac/isaacgym/docs/api/python/struct_py.html#isaacgym.gymapi.PlaneParams
+
+# gym.load_asset()
+## gymapi.AssetOptions() file:///home/fbm2/isaac/isaacgym/docs/api/python/struct_py.html#isaacgym.gymapi.AssetOptions
+
+# actor
+## gym.get_actor_rigid_shape_properties() file:///home/fbm2/isaac/isaacgym/docs/api/python/struct_py.html#isaacgym.gymapi.RigidShapeProperties
+## gym.get_actor_rigid_body_properties() file:///home/fbm2/isaac/isaacgym/docs/api/python/struct_py.html#isaacgym.gymapi.RigidBodyProperties
+## gym.get_actor_dof_properties() file:///home/fbm2/isaac/isaacgym/docs/api/python/gym_py.html?highlight=dof_properties#isaacgym.gymapi.Gym.get_actor_dof_properties
+
+sim_params:
+  dt: 0.01666666753590107
+  enable_actor_creation_warning: True
+  flex: <isaacgym._bindings.linux-x86_64.gym_38.FlexParams object at 0x7fe5087fa5b0>
+  gravity: Vec3(0.000000, -9.800000, 0.000000)
+  num_client_threads: 0
+  physx: <isaacgym._bindings.linux-x86_64.gym_38.PhysXParams object at 0x7fe5087fa3f0>
+  stress_visualization: False
+  stress_visualization_max: 100000.0
+  stress_visualization_min: 0.0
+  substeps: 2
+  up_axis: UpAxis.UP_AXIS_Y
+  use_gpu_pipeline: False
+
+physx_params:
+  always_use_articulations: False
+  bounce_threshold_velocity: 0.20000000298023224
+  contact_collection: ContactCollection.CC_ALL_SUBSTEPS
+  contact_offset: 0.019999999552965164
+  default_buffer_size_multiplier: 2.0
+  friction_correlation_distance: 0.02500000037252903
+  friction_offset_threshold: 0.03999999910593033
+  max_depenetration_velocity: 100.0
+  max_gpu_contact_pairs: 1048576
+  num_position_iterations: 4
+  num_subscenes: 0
+  num_threads: 0
+  num_velocity_iterations: 1
+  rest_offset: 0.0010000000474974513
+  solver_type: 1
+  use_gpu: False
+
+plane_params:
+  distance: 0.0
+  dynamic_friction: 1.0
+  normal: Vec3(0.000000, 1.000000, 0.000000)
+  restitution: 0.0
+  segmentation_id: 0
+  static_friction: 1.0
+
+asset_options:
+  angular_damping: 0.5
+  armature: 0.0
+  collapse_fixed_joints: False
+  convex_decomposition_from_submeshes: False
+  default_dof_drive_mode: 0
+  density: 1000.0
+  disable_gravity: False
+  enable_gyroscopic_forces: True
+  fix_base_link: False
+  flip_visual_attachments: False
+  linear_damping: 0.0
+  max_angular_velocity: 64.0
+  max_linear_velocity: 1000.0
+  mesh_normal_mode: MeshNormalMode.FROM_ASSET
+  min_particle_mass: 9.999999960041972e-13
+  override_com: False
+  override_inertia: False
+  replace_cylinder_with_capsule: False
+  slices_per_cylinder: 20
+  tendon_limit_stiffness: 1.0
+  thickness: 0.019999999552965164
+  use_mesh_materials: False
+  use_physx_armature: True
+  vhacd_enabled: False
+  vhacd_params: <isaacgym._bindings.linux-x86_64.gym_38.VhacdParams object at 0x7f8ca61d07b0>
+
+rigid_shape_properties:
+  compliance: 0.0
+  contact_offset: 0.019999999552965164
+  filter: 0
+  friction: 1.0
+  rest_offset: 0.0010000000474974513
+  restitution: 0.0
+  rolling_friction: 0.0
+  thickness: 0.0
+  torsion_friction: 0.0
+
+rigid_body_properties: ## robot body defaults
+  com: Vec3(0.000000, 0.000000, 0.000000)
+  flags: 0
+  inertia: <isaacgym._bindings.linux-x86_64.gym_38.Mat33 object at 0x7f864a0b8c30>
+  invInertia: <isaacgym._bindings.linux-x86_64.gym_38.Mat33 object at 0x7f864a0b8c30>
+  invMass: 3.0303030014038086
+  mass: 0.33000001311302185
+
+dof_properties:
+  hasLimits: False
+  lower: 0.0
+  upper: 0.0
+  driveMode: 0
+  velocity: 150.0
+  effort: 0.10000000149011612
+  stiffness: 3.4028234663852886e+38
+  damping: 0.0
+  friction: 0.0
+  armature: 0.0
