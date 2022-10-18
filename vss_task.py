@@ -45,7 +45,7 @@ def get_cfg():
 class VSS3v3(VecTask):
     def __init__(self):
         self.cfg = get_cfg()
-        self.max_episode_length = 1000
+        self.max_episode_length = 400
 
         self.n_blue_robots = 1
         self.n_yellow_robots = 0
@@ -57,8 +57,8 @@ class VSS3v3(VecTask):
         self.goal_height = 0.4
 
         self.w_goal = 5
-        self.w_grad = 2
-        self.w_energy = 1 / 2000
+        self.w_grad = 0
+        self.w_energy = 0.0
         self.w_move = 0.0
 
         self.cfg['env']['numActions'] = 2 * (self.n_blue_robots + self.n_yellow_robots)
@@ -194,7 +194,7 @@ class VSS3v3(VecTask):
         _, _, angle = get_euler_xyz(self.robot_state[..., 3:7])
         self.obs_buf[..., 8] = torch.cos(angle)
         self.obs_buf[..., 9] = torch.sin(angle)
-        self.obs_buf[..., 10] = self.robot_state[..., 12]
+        self.obs_buf[..., 10] = self.robot_state[..., 12] / 50.0
         self.obs_buf[..., 11:13] = self.actions
 
     def reset_dones(self):

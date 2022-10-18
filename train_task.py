@@ -59,7 +59,7 @@ def train() -> None:
     lr = 3e-4
     total_timesteps = 300000
     learning_starts = 25e4
-    batch_size = 2048
+    batch_size = 4096
     gamma = 0.99
     tau = 0.005
 
