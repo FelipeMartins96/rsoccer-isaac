@@ -55,7 +55,6 @@ def train() -> None:
     task = VSS3v3()
 
     writer = SummaryWriter()
-
     device = task.cfg['rl_device']
     lr = 3e-4
     total_timesteps = 300000
@@ -205,11 +204,11 @@ def train() -> None:
             if global_step % 10000 == 0:
                 torch.save(
                     actor.state_dict(),
-                    f"actor{task.robot_max_wheel_rad_s}.pt",
+                    f"{writer.get_logdir()}/actor.pth",
                 )
     torch.save(
         actor.state_dict(),
-        f"actor{task.robot_max_wheel_rad_s}.pt",
+        f"{writer.get_logdir()}/actor.pth",
     )
 
 

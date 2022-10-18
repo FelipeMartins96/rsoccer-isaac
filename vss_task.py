@@ -59,7 +59,7 @@ class VSS3v3(VecTask):
         self.w_goal = 5
         self.w_grad = 2
         self.w_energy = 1 / 2000
-        self.w_move = 1
+        self.w_move = 0.0
 
         self.cfg['env']['numActions'] = 2 * (self.n_blue_robots + self.n_yellow_robots)
         self.cfg['env']['numObservations'] = (
@@ -282,7 +282,9 @@ class VSS3v3(VecTask):
         props = self.gym.get_actor_dof_properties(env, robot)
         props["driveMode"].fill(gymapi.DOF_MODE_VEL)
         props["stiffness"].fill(0.0)
-        props["damping"].fill(100.0)
+        props["damping"].fill(0.01)
+        props['armature'].fill(0.0002)
+        props['friction'].fill(0.0002)
         props['velocity'].fill(self.robot_max_wheel_rad_s)
         self.gym.set_actor_dof_properties(env, robot, props)
 
