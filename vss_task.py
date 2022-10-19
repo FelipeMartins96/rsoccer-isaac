@@ -230,18 +230,22 @@ class VSS3v3(VecTask):
 
             # randomize positions
             rand_pos = (
-                torch.rand((len(env_ids), 2, 2), dtype=torch.float, device=self.device)
+                torch.rand(
+                    (len(env_ids), self.n_robots + 1, 2),
+                    dtype=torch.float,
+                    device=self.device,
+                )
                 - 0.5
             ) * self.field_scale
-            self.ball_pos[env_ids] = rand_pos[:, 0]
-            self.robots_pos[env_ids] = rand_pos[:, 0, 1]
+            self.ball_pos[env_ids] = rand_pos[:, self.ball]
+            self.robots_pos[env_ids] = rand_pos[:, self.robots]
 
             # randomize rotations
             rand_angles = torch_rand_float(
-                -np.pi, np.pi, (len(env_ids), 1), device=self.device
+                -np.pi, np.pi, (len(env_ids), self.n_robots), device=self.device
             )
-            self.robots_rotation[env_ids, 0] = quat_from_angle_axis(
-                rand_angles[:, 0], self.z_axis
+            self.robots_rotation[env_ids] = quat_from_angle_axis(
+                rand_angles, self.z_axis
             )
 
             self.gym.set_actor_root_state_tensor(
