@@ -67,7 +67,7 @@ class VSS3v3(VecTask):
 
         self.cfg['env']['numActions'] = 2
         self.cfg['env']['numObservations'] = (
-            4 + (self.n_blue_robots + self.n_yellow_robots) * 9
+            4 + (self.n_blue_robots + self.n_yellow_robots) * 7 + 2
         )
 
         super().__init__(
@@ -215,10 +215,10 @@ class VSS3v3(VecTask):
         self.obs_buf[..., 2:4] = self.ball_vel
         self.obs_buf[..., 4:6] = self.robots_pos[:, 0]
         self.obs_buf[..., 6:8] = self.robots_vel[:, 0]
-        _, _, angle = get_euler_xyz(self.robots_state[..., 0, 3:7])
+        _, _, angle = get_euler_xyz(self.robots_quats[..., 0])
         self.obs_buf[..., 8] = torch.cos(angle)
         self.obs_buf[..., 9] = torch.sin(angle)
-        self.obs_buf[..., 10] = self.robots_state[..., 0, 12] / 50.0
+        self.obs_buf[..., 10] = self.robots_ang_vel[..., 0] / 50.0
         self.obs_buf[..., 11:13] = self.dof_velocity_buf[..., :2]
 
     def reset_dones(self):
@@ -244,9 +244,7 @@ class VSS3v3(VecTask):
             rand_angles = torch_rand_float(
                 -np.pi, np.pi, (len(env_ids), self.n_robots), device=self.device
             )
-            self.robots_rotation[env_ids] = quat_from_angle_axis(
-                rand_angles, self.z_axis
-            )
+            self.robots_quats[env_ids] = quat_from_angle_axis(rand_angles, self.z_axis)
 
             self.gym.set_actor_root_state_tensor(
                 self.sim, gymtorch.unwrap_tensor(self.root_state)
@@ -434,18 +432,20 @@ class VSS3v3(VecTask):
         self.root_state = gymtorch.wrap_tensor(_root_state).view(
             self.num_envs, self.num_actors, 13
         )
-        self.robots_state = self.root_state[:, self.robots, :]
 
         self.root_pos = self.root_state[..., 0:2]
         self.robots_pos = self.root_pos[:, self.robots, :]
         self.ball_pos = self.root_pos[:, self.ball, :]
 
-        self.root_rotation = self.root_state[..., 3:7]
-        self.robots_rotation = self.root_rotation[:, self.robots, :]
+        self.root_quats = self.root_state[..., 3:7]
+        self.robots_quats = self.root_quats[:, self.robots, :]
 
         self.root_vel = self.root_state[..., 7:9]
         self.robots_vel = self.root_vel[:, self.robots, :]
         self.ball_vel = self.root_vel[:, self.ball, :]
+
+        self.root_ang_vel = self.root_state[..., 12]
+        self.robots_ang_vel = self.root_ang_vel[:, self.robots]
 
         self._refresh_tensors()
         self.env_reset_root_state = self.root_state[0].clone()
