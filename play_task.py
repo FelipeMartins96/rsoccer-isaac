@@ -19,7 +19,7 @@ def play_random_policy():
         return a * value
 
     while not task.gym.query_viewer_has_closed(task.viewer):
-        task.step(constant_value(0.1))
+        task.step(random_vec_actions())
 
 
 if __name__ == '__main__':

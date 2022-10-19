@@ -213,13 +213,15 @@ class VSS3v3(VecTask):
     def compute_observations(self):
         self.obs_buf[..., :2] = self.ball_pos
         self.obs_buf[..., 2:4] = self.ball_vel
-        self.obs_buf[..., 4:6] = self.robots_pos[:, 0]
-        self.obs_buf[..., 6:8] = self.robots_vel[:, 0]
-        _, _, angle = get_euler_xyz(self.robots_quats[..., 0])
-        self.obs_buf[..., 8] = torch.cos(angle)
-        self.obs_buf[..., 9] = torch.sin(angle)
-        self.obs_buf[..., 10] = self.robots_ang_vel[..., 0] / 50.0
-        self.obs_buf[..., 11:13] = self.dof_velocity_buf[..., :2]
+        self.obs_buf[..., 4:-2] = compute_robots_obs(
+            self.robots_pos,
+            self.robots_vel,
+            self.robots_quats,
+            self.robots_ang_vel,
+            self.n_robots,
+            self.num_envs,
+        )
+        self.obs_buf[..., -2:] = self.dof_velocity_buf[..., :2]
 
     def reset_dones(self):
         env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
@@ -546,3 +548,27 @@ def compute_vss_dones(
     reset = torch.where(progress_buf >= max_episode_length, ones, reset)
 
     return reset
+
+
+@torch.jit.script
+def compute_robots_obs(
+    robots_pos,
+    robots_vel,
+    robots_quats,
+    robots_ang_vel,
+    n_robots,
+    num_envs,
+):
+    # type: (Tensor, Tensor, Tensor, Tensor, int, int) -> Tensor
+    robots_obs = torch.zeros(
+        (num_envs, n_robots, 7), dtype=torch.float, device=robots_pos.device
+    )
+    robots_obs[..., 0:2] = robots_pos
+    robots_obs[..., 2:4] = robots_vel
+    _, _, angles = get_euler_xyz(robots_quats.reshape(-1, 4))
+    angles = angles.reshape(num_envs, n_robots)
+    robots_obs[..., 4] = torch.cos(angles)
+    robots_obs[..., 5] = torch.sin(angles)
+    robots_obs[..., 6] = robots_ang_vel / 50.0
+
+    return robots_obs.view(num_envs, -1)
