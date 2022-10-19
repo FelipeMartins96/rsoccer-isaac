@@ -115,9 +115,10 @@ class VSS3v3(VecTask):
                 color = (
                     gymapi.Vec3(0.0, 0.4, 0.2) if j == 0 else gymapi.Vec3(0.0, 0.0, 0.3)
                 )
-                self._add_robot(_env, i, color)
-            for _ in range(self.n_yellow_robots):
-                self._add_robot(_env, i, gymapi.Vec3(0.5, 0.55, 0.0))
+                self._add_robot(_env, i, color, -(j + 1))
+            for j in range(self.n_yellow_robots):
+                color = gymapi.Vec3(0.5, 0.55, 0.0)
+                self._add_robot(_env, i, color, j + 1)
             self._add_field(_env, i)
 
     def pre_physics_step(self, _actions):
@@ -170,7 +171,7 @@ class VSS3v3(VecTask):
         # goal, grad, energy, move
         _, p_grad, _, p_move = compute_vss_rewards(
             self.ball_pos,
-            self.robot_pos,
+            self.robots_pos,
             self.dof_velocity_buf,
             self.rew_buf,
             self.yellow_goal,
@@ -180,7 +181,7 @@ class VSS3v3(VecTask):
         self._refresh_tensors()
         goal, grad, energy, move = compute_vss_rewards(
             self.ball_pos,
-            self.robot_pos,
+            self.robots_pos,
             self.dof_velocity_buf,
             self.rew_buf,
             self.yellow_goal,
@@ -212,12 +213,12 @@ class VSS3v3(VecTask):
     def compute_observations(self):
         self.obs_buf[..., :2] = self.ball_pos
         self.obs_buf[..., 2:4] = self.ball_vel
-        self.obs_buf[..., 4:6] = self.robot_pos
-        self.obs_buf[..., 6:8] = self.robot_vel
-        _, _, angle = get_euler_xyz(self.robot_state[..., 3:7])
+        self.obs_buf[..., 4:6] = self.robots_pos[:, 0]
+        self.obs_buf[..., 6:8] = self.robots_vel[:, 0]
+        _, _, angle = get_euler_xyz(self.robots_state[..., 0, 3:7])
         self.obs_buf[..., 8] = torch.cos(angle)
         self.obs_buf[..., 9] = torch.sin(angle)
-        self.obs_buf[..., 10] = self.robot_state[..., 12] / 50.0
+        self.obs_buf[..., 10] = self.robots_state[..., 0, 12] / 50.0
         self.obs_buf[..., 11:13] = self.dof_velocity_buf[..., :2]
 
     def reset_dones(self):
@@ -233,13 +234,13 @@ class VSS3v3(VecTask):
                 - 0.5
             ) * self.field_scale
             self.ball_pos[env_ids] = rand_pos[:, 0]
-            self.robot_pos[env_ids] = rand_pos[:, 1]
+            self.robots_pos[env_ids] = rand_pos[:, 0, 1]
 
             # randomize rotations
             rand_angles = torch_rand_float(
                 -np.pi, np.pi, (len(env_ids), 1), device=self.device
             )
-            self.robot_rotation[env_ids] = quat_from_angle_axis(
+            self.robots_rotation[env_ids, 0] = quat_from_angle_axis(
                 rand_angles[:, 0], self.z_axis
             )
 
@@ -278,7 +279,7 @@ class VSS3v3(VecTask):
         )
         self.gym.set_rigid_body_color(env, ball, 0, gymapi.MESH_VISUAL, color)
 
-    def _add_robot(self, env, env_id, color):
+    def _add_robot(self, env, env_id, color, pos_id):
         options = gymapi.AssetOptions()
         root = os.path.dirname(os.path.abspath(__file__))
         rbt_asset = self.gym.load_asset(
@@ -289,7 +290,7 @@ class VSS3v3(VecTask):
         )
         body, left_wheel, right_wheel = 0, 1, 2
         initial_height = 0.024  # _z dimension
-        pose = gymapi.Transform(p=gymapi.Vec3(-0.1, 0.0, initial_height))
+        pose = gymapi.Transform(p=gymapi.Vec3(0.1 * pos_id, 0.0, initial_height))
         robot = self.gym.create_actor(
             env=env, asset=rbt_asset, pose=pose, group=env_id, filter=0b00, name='robot'
         )
@@ -419,7 +420,7 @@ class VSS3v3(VecTask):
         n_field_actors = 8  # 2 side walls, 4 end walls, 2 goal walls
         self.num_actors = n_balls + n_robots + n_field_actors
         self.ball = 0
-        self.robot = 1
+        self.robots = slice(n_balls, n_balls + n_robots)
         # self.blue_robots = slice(n_balls, n_balls + self.n_blue_robots)
         # self.yellow_robots = slice(n_balls + self.n_blue_robots, n_balls + n_robots)
 
@@ -429,17 +430,17 @@ class VSS3v3(VecTask):
         self.root_state = gymtorch.wrap_tensor(_root_state).view(
             self.num_envs, self.num_actors, 13
         )
-        self.robot_state = self.root_state[:, self.robot, :]
+        self.robots_state = self.root_state[:, self.robots, :]
 
         self.root_pos = self.root_state[..., 0:2]
-        self.robot_pos = self.root_pos[:, self.robot, :]
+        self.robots_pos = self.root_pos[:, self.robots, :]
         self.ball_pos = self.root_pos[:, self.ball, :]
 
         self.root_rotation = self.root_state[..., 3:7]
-        self.robot_rotation = self.root_rotation[:, self.robot, :]
+        self.robots_rotation = self.root_rotation[:, self.robots, :]
 
         self.root_vel = self.root_state[..., 7:9]
-        self.robot_vel = self.root_vel[:, self.robot, :]
+        self.robots_vel = self.root_vel[:, self.robots, :]
         self.ball_vel = self.root_vel[:, self.ball, :]
 
         self._refresh_tensors()
@@ -486,7 +487,7 @@ class VSS3v3(VecTask):
 
 @torch.jit.script
 def compute_vss_rewards(
-    ball_pos, robot_pos, actions, rew_buf, yellow_goal, field_width, goal_height
+    ball_pos, robots_pos, actions, rew_buf, yellow_goal, field_width, goal_height
 ):
     # type: (Tensor, Tensor, Tensor, Tensor, Tensor, float, float) -> Tuple[Tensor, Tensor, Tensor, Tensor]
     # Negative what we want to reduce, Positive what we want to increase
@@ -504,7 +505,7 @@ def compute_vss_rewards(
     goal = torch.where(is_goal_yellow, -ones, goal)
 
     # MOVE
-    move = -torch.norm(robot_pos - ball_pos, dim=1)
+    move = -torch.norm(robots_pos[:, 0, :] - ball_pos, dim=1)
 
     # GRAD
     dist_ball_left_goal = torch.norm(ball_pos - (-yellow_goal), dim=1)
