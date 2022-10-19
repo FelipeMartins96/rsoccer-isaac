@@ -62,7 +62,10 @@ class VSS3v3(VecTask):
         self.w_energy = 0.0
         self.w_move = 0.0
 
-        self.cfg['env']['numActions'] = 2 * (self.n_blue_robots + self.n_yellow_robots)
+        self.ou_theta = 0.1
+        self.ou_sigma = 0.2
+
+        self.cfg['env']['numActions'] = 2
         self.cfg['env']['numObservations'] = (
             4 + (self.n_blue_robots + self.n_yellow_robots) * 9
         )
@@ -122,8 +125,24 @@ class VSS3v3(VecTask):
         env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
         self.progress_buf[env_ids] = 0
 
-        self.actions = _actions.to(self.device)
-        act = self.actions * self.robot_max_wheel_rad_s
+        self.dof_velocity_buf[..., :2] = _actions.to(self.device)
+
+        # Send OU noise action to non controlled robots
+        self.ou_buffer = (
+            self.ou_buffer
+            - self.ou_theta * self.ou_buffer
+            + torch.normal(
+                0.0,
+                self.ou_sigma,
+                size=self.ou_buffer.shape,
+                device=self.device,
+                requires_grad=False,
+            )
+        )
+        self.ou_buffer = torch.clamp(self.ou_buffer, -1.0, 1.0)
+        self.dof_velocity_buf[..., 2:] = self.ou_buffer
+
+        act = self.dof_velocity_buf * self.robot_max_wheel_rad_s
         self.gym.set_dof_velocity_target_tensor(self.sim, gymtorch.unwrap_tensor(act))
 
     def post_physics_step(self):
@@ -152,7 +171,7 @@ class VSS3v3(VecTask):
         _, p_grad, _, p_move = compute_vss_rewards(
             self.ball_pos,
             self.robot_pos,
-            self.actions,
+            self.dof_velocity_buf,
             self.rew_buf,
             self.yellow_goal,
             self.field_width,
@@ -162,7 +181,7 @@ class VSS3v3(VecTask):
         goal, grad, energy, move = compute_vss_rewards(
             self.ball_pos,
             self.robot_pos,
-            self.actions,
+            self.dof_velocity_buf,
             self.rew_buf,
             self.yellow_goal,
             self.field_width,
@@ -199,7 +218,7 @@ class VSS3v3(VecTask):
         self.obs_buf[..., 8] = torch.cos(angle)
         self.obs_buf[..., 9] = torch.sin(angle)
         self.obs_buf[..., 10] = self.robot_state[..., 12] / 50.0
-        self.obs_buf[..., 11:13] = self.actions
+        self.obs_buf[..., 11:13] = self.dof_velocity_buf[..., :2]
 
     def reset_dones(self):
         env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
@@ -232,7 +251,8 @@ class VSS3v3(VecTask):
             self.rw_grad[env_ids] = 0.0
             self.rw_energy[env_ids] = 0.0
             self.rw_move[env_ids] = 0.0
-            self.actions[env_ids] *= 0.0
+            self.dof_velocity_buf[env_ids] *= 0.0
+            self.ou_buffer[env_ids] *= 0.0
 
     def _add_ground(self):
         pp = gymapi.PlaneParams()
@@ -446,8 +466,13 @@ class VSS3v3(VecTask):
         self.rw_move = torch.zeros_like(
             self.rew_buf, device=self.device, requires_grad=False
         )
-        self.actions = torch.zeros(
-            (self.num_envs, self.num_actions), device=self.device, requires_grad=False
+        self.dof_velocity_buf = torch.zeros(
+            (self.num_envs, self.n_robots * 2), device=self.device, requires_grad=False
+        )
+        self.ou_buffer = torch.zeros(
+            (self.num_envs, (self.n_robots - 1) * 2),
+            device=self.device,
+            requires_grad=False,
         )
 
     def _refresh_tensors(self):
