@@ -47,8 +47,9 @@ class VSS3v3(VecTask):
         self.cfg = get_cfg()
         self.max_episode_length = 400
 
-        self.n_blue_robots = 1
-        self.n_yellow_robots = 0
+        self.n_blue_robots = 3
+        self.n_yellow_robots = 3
+        self.n_robots = self.n_blue_robots + self.n_yellow_robots
         self.env_total_width = 2
         self.env_total_height = 1.5
         self.robot_max_wheel_rad_s = 100.0
@@ -107,10 +108,13 @@ class VSS3v3(VecTask):
             )
 
             self._add_ball(_env, i)
-            for _ in range(self.n_blue_robots):
-                self._add_robot(_env, i, gymapi.Vec3(0.0, 0.0, 0.3))
+            for j in range(self.n_blue_robots):
+                color = (
+                    gymapi.Vec3(0.0, 0.4, 0.2) if j == 0 else gymapi.Vec3(0.0, 0.0, 0.3)
+                )
+                self._add_robot(_env, i, color)
             for _ in range(self.n_yellow_robots):
-                self._add_robot(_env, i, gymapi.Vec3(0.3, 0.3, 0.0))
+                self._add_robot(_env, i, gymapi.Vec3(0.5, 0.55, 0.0))
             self._add_field(_env, i)
 
     def pre_physics_step(self, _actions):
