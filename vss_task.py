@@ -1,3 +1,4 @@
+from itertools import combinations
 import os
 from typing import Tuple
 
@@ -50,6 +51,7 @@ class VSS3v3(VecTask):
         self.n_blue_robots = 3
         self.n_yellow_robots = 3
         self.n_robots = self.n_blue_robots + self.n_yellow_robots
+        self.n_balls = 1  # does not support more
         self.env_total_width = 2
         self.env_total_height = 1.5
         self.robot_max_wheel_rad_s = 100.0
@@ -79,6 +81,12 @@ class VSS3v3(VecTask):
             virtual_screen_capture=self.cfg['virtual_screen_capture'],
             force_render=self.cfg['force_render'],
         )
+
+        entities_ids = list(range(self.n_robots + self.n_balls))
+        self.combinations = torch.tensor(
+            list(combinations(entities_ids, 2)), device=self.device
+        )
+        self.min_dist = 0.07
 
         self._acquire_tensors()
         self._refresh_tensors()
@@ -233,12 +241,40 @@ class VSS3v3(VecTask):
             # randomize positions
             rand_pos = (
                 torch.rand(
-                    (len(env_ids), self.n_robots + 1, 2),
+                    (len(env_ids), self.n_robots + self.n_balls, 2),
                     dtype=torch.float,
                     device=self.device,
+                    requires_grad=False,
                 )
                 - 0.5
             ) * self.field_scale
+
+            # Check for colliding robots
+            dists = torch.linalg.norm(
+                rand_pos[:, self.combinations[:, 0], :]
+                - rand_pos[:, self.combinations[:, 1], :],
+                dim=2,
+            )
+            too_close = torch.any(dists < self.min_dist, dim=1)
+            close_ids = too_close.nonzero(as_tuple=False).squeeze(-1)
+            while len(close_ids):
+                rand_pos[close_ids] = (
+                    torch.rand(
+                        (len(close_ids), self.n_robots + self.n_balls, 2),
+                        dtype=torch.float,
+                        device=self.device,
+                        requires_grad=False,
+                    )
+                    - 0.5
+                ) * self.field_scale
+                dists = torch.linalg.norm(
+                    rand_pos[:, self.combinations[:, 0], :]
+                    - rand_pos[:, self.combinations[:, 1], :],
+                    dim=2,
+                )
+                too_close = torch.any(dists < self.min_dist, dim=1)
+                close_ids = too_close.nonzero(as_tuple=False).squeeze(-1)
+
             self.ball_pos[env_ids] = rand_pos[:, self.ball]
             self.robots_pos[env_ids] = rand_pos[:, self.robots]
 
@@ -411,13 +447,15 @@ class VSS3v3(VecTask):
     def _acquire_tensors(self):
         """Acquire and wrap tensors. Create views."""
 
-        self.field_scale = torch.tensor(
-            [self.field_width, self.field_height],
-            dtype=torch.float,
-            device=self.device,
-            requires_grad=False,
+        self.field_scale = (
+            torch.tensor(
+                [self.field_width, self.field_height],
+                dtype=torch.float,
+                device=self.device,
+                requires_grad=False,
+            )
+            - self.min_dist
         )
-        # TODO: working only for one robot
 
         n_balls = 1
         n_robots = self.n_blue_robots + self.n_yellow_robots
@@ -425,10 +463,7 @@ class VSS3v3(VecTask):
         self.num_actors = n_balls + n_robots + n_field_actors
         self.ball = 0
         self.robots = slice(n_balls, n_balls + n_robots)
-        # self.blue_robots = slice(n_balls, n_balls + self.n_blue_robots)
-        # self.yellow_robots = slice(n_balls + self.n_blue_robots, n_balls + n_robots)
 
-        # shape = (num_envs * num_actors, 13)
         _root_state = self.gym.acquire_actor_root_state_tensor(self.sim)
 
         self.root_state = gymtorch.wrap_tensor(_root_state).view(
