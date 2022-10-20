@@ -53,8 +53,6 @@ class Actor(nn.Module):
 
 
 def train(args) -> None:
-    print(args.grad, args.energy, args.move)
-    return
     task = VSS3v3(has_grad=args.grad, has_energy=args.energy, has_move=args.move)
 
     writer = SummaryWriter()
