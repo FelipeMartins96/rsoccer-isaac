@@ -14,14 +14,14 @@ def get_cfg():
         'rl_device': 'cuda:0',
         'sim_device': 'cuda:0',
         'graphics_device_id': 0,
-        'headless': False,
+        'headless': True,
         'virtual_screen_capture': False,
-        'force_render': True,
+        'force_render': False,
         'physics_engine': 'physx',
     }
 
     cfg['env'] = {
-        'numEnvs': 2048,
+        'numEnvs': 4096,
     }
 
     cfg['sim'] = {
