@@ -43,7 +43,7 @@ def get_cfg():
 
 
 class VSS3v3(VecTask):
-    def __init__(self):
+    def __init__(self, has_grad=True, has_energy=True, has_move=True):
         self.cfg = get_cfg()
         self.max_episode_length = 400
 
@@ -58,9 +58,9 @@ class VSS3v3(VecTask):
         self.goal_height = 0.4
 
         self.w_goal = 5
-        self.w_grad = 2
-        self.w_energy = 1 / 2000
-        self.w_move = 1
+        self.w_grad = 2 if has_grad else 0
+        self.w_energy = 1 / 2000 if has_energy else 0
+        self.w_move = 1 if has_move else 0
 
         self.ou_theta = 0.1
         self.ou_sigma = 0.2

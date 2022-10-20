@@ -1,3 +1,4 @@
+import argparse
 import hydra
 import gym
 import isaacgym
@@ -51,8 +52,10 @@ class Actor(nn.Module):
         return x
 
 
-def train() -> None:
-    task = VSS3v3()
+def train(args) -> None:
+    print(args.grad, args.energy, args.move)
+    return
+    task = VSS3v3(has_grad=args.grad, has_energy=args.energy, has_move=args.move)
 
     writer = SummaryWriter()
     device = task.cfg['rl_device']
@@ -226,4 +229,9 @@ def train() -> None:
 
 
 if __name__ == "__main__":
-    train()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--move", default=False, action="store_true")
+    parser.add_argument("--grad", default=False, action="store_true")
+    parser.add_argument("--energy", default=False, action="store_true")
+    args = parser.parse_args()
+    train(args)
