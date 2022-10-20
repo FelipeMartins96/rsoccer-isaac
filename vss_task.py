@@ -58,9 +58,9 @@ class VSS3v3(VecTask):
         self.goal_height = 0.4
 
         self.w_goal = 5
-        self.w_grad = 0
-        self.w_energy = 0.0
-        self.w_move = 0.0
+        self.w_grad = 2
+        self.w_energy = 1 / 2000
+        self.w_move = 1
 
         self.ou_theta = 0.1
         self.ou_sigma = 0.2
