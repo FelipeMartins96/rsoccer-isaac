@@ -74,25 +74,37 @@ def train() -> None:
 
     rb = ReplayBuffer(4000000, device)
     start_time = time.time()
-    episodic_return = torch.zeros(task.num_envs, device=device)
-    episodic_length = torch.zeros(task.num_envs, device=device)
     # TRY NOT TO MODIFY: start the game
     obs = deepcopy(task.reset())
+
+    ou_theta = 0.1
+    ou_sigma = 0.15
+
+    def random_ou(prev):
+        noise = (
+            prev
+            - ou_theta * prev
+            + torch.normal(
+                0.0,
+                ou_sigma,
+                size=(task.num_envs,) + task.action_space.shape,
+                device=device,
+                requires_grad=False,
+            )
+        )
+        return noise.clamp(-1.0, 1.0)
+
+    noise = task.zero_actions()
+
     for global_step in range(total_timesteps):
         # ALGO LOGIC: put action logic here
-        if rb.get_total_count() < learning_starts:
-            actions = torch.tensor(
-                [task.action_space.sample() for _ in range(task.num_envs)],
-                dtype=torch.float32,
-                device=device,
-            )
-        else:
-            with torch.no_grad():
-                actions = actor(obs['obs'])
-                actions += torch.normal(
-                    torch.zeros_like(actions, dtype=torch.float32, device=device),
-                    1.0 * 0.3,
-                )
+
+        with torch.no_grad():
+            noise = random_ou(noise)
+            if rb.get_total_count() < learning_starts:
+                actions = noise
+            else:
+                actions = actor(obs['obs']) + noise
 
         actions = torch.clamp(actions, -1.0, 1.0)
         # TRY NOT TO MODIFY: execute the game and log data.
@@ -136,6 +148,7 @@ def train() -> None:
             )
             real_next_obs[env_ids] = infos["terminal_observation"][env_ids]
             dones = dones.logical_and(infos["time_outs"].logical_not())
+            noise[env_ids] *= 0.0
 
         # TRY NOT TO MODIFY: save data to replay buffer;
         rb.store(
