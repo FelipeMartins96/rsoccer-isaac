@@ -22,7 +22,7 @@ def get_cfg():
     }
 
     cfg['env'] = {
-        'numEnvs': 4096,
+        'numEnvs': 2048,
     }
 
     cfg['sim'] = {
