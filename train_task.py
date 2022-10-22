@@ -218,11 +218,11 @@ def train(args) -> None:
             if global_step % 10000 == 0:
                 torch.save(
                     actor.state_dict(),
-                    f"{writer.get_logdir()}/actor.pth",
+                    f"{writer.get_logdir()}/actor{args.comment}.pth",
                 )
     torch.save(
         actor.state_dict(),
-        f"{writer.get_logdir()}/actor.pth",
+        f"{writer.get_logdir()}/actor{args.comment}.pth",
     )
 
 

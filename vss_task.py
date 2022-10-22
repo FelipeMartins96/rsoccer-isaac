@@ -64,8 +64,8 @@ class VSS3v3(VecTask):
         self.w_energy = 1 / 2000 if has_energy else 0
         self.w_move = 1 if has_move else 0
 
-        self.ou_theta = 0  # 0.1
-        self.ou_sigma = 0  # 0.2
+        self.ou_theta = 0.1
+        self.ou_sigma = 0.2
 
         self.cfg['env']['numActions'] = 2
         self.cfg['env']['numObservations'] = (
@@ -137,18 +137,18 @@ class VSS3v3(VecTask):
         self.dof_velocity_buf[..., :2] = _actions.to(self.device)
 
         # Send OU noise action to non controlled robots
-        self.ou_buffer = (
-            self.ou_buffer
-            - self.ou_theta * self.ou_buffer
-            + torch.normal(
-                0.0,
-                self.ou_sigma,
-                size=self.ou_buffer.shape,
-                device=self.device,
-                requires_grad=False,
-            )
-        )
-        self.ou_buffer = torch.clamp(self.ou_buffer, -1.0, 1.0)
+        # self.ou_buffer = (
+        #     self.ou_buffer
+        #     - self.ou_theta * self.ou_buffer
+        #     + torch.normal(
+        #         0.0,
+        #         self.ou_sigma,
+        #         size=self.ou_buffer.shape,
+        #         device=self.device,
+        #         requires_grad=False,
+        #     )
+        # )
+        # self.ou_buffer = torch.clamp(self.ou_buffer, -1.0, 1.0)
         self.dof_velocity_buf[..., 2:] = self.ou_buffer
 
         act = self.dof_velocity_buf * self.robot_max_wheel_rad_s
