@@ -55,10 +55,10 @@ class Actor(nn.Module):
 def train(args) -> None:
     task = VSS3v3(has_grad=args.grad, has_energy=args.energy, has_move=args.move)
 
-    writer = SummaryWriter()
+    writer = SummaryWriter(comment=args.comment)
     device = task.cfg['rl_device']
     lr = 3e-4
-    total_timesteps = 300000
+    total_timesteps = 600000
     learning_starts = 25e4
     batch_size = 4096
     gamma = 0.99
@@ -231,5 +231,6 @@ if __name__ == "__main__":
     parser.add_argument("--move", default=False, action="store_true")
     parser.add_argument("--grad", default=False, action="store_true")
     parser.add_argument("--energy", default=False, action="store_true")
+    parser.add_argument("--comment", default='', type=str)
     args = parser.parse_args()
     train(args)

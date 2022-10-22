@@ -1,3 +1,3 @@
-python train_task.py;
-python train_task.py --grad;
-python train_task.py --grad --move --energy;
+python train_task.py --comment "stopped-grad-goal" --grad;
+python train_task.py --comment "stopped-allrws" --grad --move --energy;
+python train_task.py --comment "stopped-onlygoal";
