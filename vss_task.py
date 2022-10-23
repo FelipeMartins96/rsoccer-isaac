@@ -67,9 +67,9 @@ class VSS3v3(VecTask):
         self.ou_theta = 0.1
         self.ou_sigma = 0.2
 
-        self.cfg['env']['numActions'] = 2
+        self.cfg['env']['numActions'] = 6
         self.cfg['env']['numObservations'] = (
-            4 + (self.n_blue_robots + self.n_yellow_robots) * 7 + 2
+            4 + (self.n_blue_robots + self.n_yellow_robots) * 7 + 6
         )
 
         super().__init__(
@@ -121,7 +121,7 @@ class VSS3v3(VecTask):
             self._add_ball(_env, i)
             for j in range(self.n_blue_robots):
                 color = (
-                    gymapi.Vec3(0.0, 0.4, 0.2) if j == 0 else gymapi.Vec3(0.0, 0.0, 0.3)
+                    gymapi.Vec3(0.0, 0.4, 0.2) if j < 0 else gymapi.Vec3(0.0, 0.0, 0.3)
                 )
                 self._add_robot(_env, i, color, -(j + 1))
             for j in range(self.n_yellow_robots):
@@ -134,7 +134,7 @@ class VSS3v3(VecTask):
         env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
         self.progress_buf[env_ids] = 0
 
-        self.dof_velocity_buf[..., :2] = _actions.to(self.device)
+        self.dof_velocity_buf[..., :6] = _actions.to(self.device)
 
         # Send OU noise action to non controlled robots
         # self.ou_buffer = (
@@ -149,7 +149,7 @@ class VSS3v3(VecTask):
         #     )
         # )
         # self.ou_buffer = torch.clamp(self.ou_buffer, -1.0, 1.0)
-        self.dof_velocity_buf[..., 2:] = self.ou_buffer
+        self.dof_velocity_buf[..., 6:] = self.ou_buffer
 
         act = self.dof_velocity_buf * self.robot_max_wheel_rad_s
         self.gym.set_dof_velocity_target_tensor(self.sim, gymtorch.unwrap_tensor(act))
@@ -221,7 +221,7 @@ class VSS3v3(VecTask):
     def compute_observations(self):
         self.obs_buf[..., :2] = self.ball_pos
         self.obs_buf[..., 2:4] = self.ball_vel
-        self.obs_buf[..., 4:-2] = compute_robots_obs(
+        self.obs_buf[..., 4:-6] = compute_robots_obs(
             self.robots_pos,
             self.robots_vel,
             self.robots_quats,
@@ -229,7 +229,7 @@ class VSS3v3(VecTask):
             self.n_robots,
             self.num_envs,
         )
-        self.obs_buf[..., -2:] = self.dof_velocity_buf[..., :2]
+        self.obs_buf[..., -6:] = self.dof_velocity_buf[..., :6]
 
     def reset_dones(self):
         env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
@@ -512,7 +512,7 @@ class VSS3v3(VecTask):
             (self.num_envs, self.n_robots * 2), device=self.device, requires_grad=False
         )
         self.ou_buffer = torch.zeros(
-            (self.num_envs, (self.n_robots - 1) * 2),
+            (self.num_envs, (self.n_robots - 3) * 2),
             device=self.device,
             requires_grad=False,
         )
