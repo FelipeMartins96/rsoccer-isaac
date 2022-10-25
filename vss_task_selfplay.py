@@ -170,13 +170,12 @@ class VSS3v3SelfPlay(VecTask):
         self.compute_observations()
 
     def compute_rewards_and_dones(self):
-        return
         # goal, grad, energy, move
         _, p_grad, _, p_move = compute_vss_rewards(
             self.ball_pos,
             self.robots_pos[:, 0, :],
             self.dof_velocity_buf,
-            self.rew_buf,
+            self.rew_buf[:, 0],
             self.yellow_goal,
             self.field_width,
             self.goal_height,
@@ -186,7 +185,7 @@ class VSS3v3SelfPlay(VecTask):
             self.ball_pos,
             self.robots_pos[:, 0, :],
             self.dof_velocity_buf,
-            self.rew_buf,
+            self.rew_buf[:, 0],
             self.yellow_goal,
             self.field_width,
             self.goal_height,
@@ -202,7 +201,9 @@ class VSS3v3SelfPlay(VecTask):
         self.rw_energy += energy_rw
         self.rw_move += move_rw
 
-        self.rew_buf = goal_rw + grad_rw + energy_rw + move_rw
+        rw_sum = (goal_rw + grad_rw).view(-1, 1)
+
+        self.rew_buf[:] = torch.cat((rw_sum, -rw_sum), dim=1)
 
         self.reset_buf = compute_vss_dones(
             ball_pos=self.ball_pos,
@@ -214,10 +215,9 @@ class VSS3v3SelfPlay(VecTask):
         )
 
     def compute_observations(self):
-        return
-        self.obs_buf[..., :2] = self.ball_pos
-        self.obs_buf[..., 2:4] = self.ball_vel
-        self.obs_buf[..., 4 : -self.n_allies_actions] = compute_robots_obs(
+        self.obs_buf[:, 0, :2] = self.ball_pos
+        self.obs_buf[:, 0, 2:4] = self.ball_vel
+        self.obs_buf[:, 0, 4 : -self.n_allies_actions] = compute_robots_obs(
             self.robots_pos,
             self.robots_vel,
             self.robots_quats,
@@ -225,8 +225,27 @@ class VSS3v3SelfPlay(VecTask):
             self.n_robots,
             self.num_envs,
         )
-        self.obs_buf[..., -self.n_allies_actions :] = self.dof_velocity_buf[
+        self.obs_buf[:, 0, -self.n_allies_actions :] = self.dof_velocity_buf[
             ..., : self.n_allies_actions
+        ]
+
+        # getting yellow obs by mirroring blue obs
+        self.obs_buf[:, 1, :4] = -self.obs_buf[:, 0, :4]
+        mirror_obs = (
+            self.obs_buf[:, 0, 4 : -self.n_allies_actions].view(
+                self.num_envs, self.n_robots, -1
+            )
+            * self.mirror_tensor
+        )
+        yellow_obs = self.obs_buf[:, 1, 4 : -self.n_allies_actions].view(
+            self.num_envs, self.n_robots, -1
+        )
+        yellow_obs[:, : self.n_yellow_robots, :] = mirror_obs[
+            :, self.n_yellow_robots :, :
+        ]
+        yellow_obs[:, self.n_blue_robots :, :] = mirror_obs[:, : self.n_blue_robots, :]
+        self.obs_buf[:, 1, -self.n_allies_actions :] = self.dof_velocity_buf[
+            ..., -self.n_allies_actions :
         ]
 
     def reset_dones(self):
@@ -529,19 +548,25 @@ class VSS3v3SelfPlay(VecTask):
         )
 
         self.rw_goal = torch.zeros_like(
-            self.rew_buf, device=self.device, requires_grad=False
+            self.rew_buf[:, 0], device=self.device, requires_grad=False
         )
         self.rw_grad = torch.zeros_like(
-            self.rew_buf, device=self.device, requires_grad=False
+            self.rew_buf[:, 0], device=self.device, requires_grad=False
         )
         self.rw_energy = torch.zeros_like(
-            self.rew_buf, device=self.device, requires_grad=False
+            self.rew_buf[:, 0], device=self.device, requires_grad=False
         )
         self.rw_move = torch.zeros_like(
-            self.rew_buf, device=self.device, requires_grad=False
+            self.rew_buf[:, 0], device=self.device, requires_grad=False
         )
         self.dof_velocity_buf = torch.zeros(
             (self.num_envs, self.n_robots * 2), device=self.device, requires_grad=False
+        )
+        self.mirror_tensor = torch.tensor(
+            [-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, 1.0],
+            dtype=torch.float,
+            device=self.device,
+            requires_grad=False,
         )
 
     def _refresh_tensors(self):
