@@ -1,2 +1,1 @@
-python train_task.py --comment "3controlled-stopped-onlygoal";
-python train_task.py --comment "3controlled-stopped-grad-goal" --grad;
+python train_task.py --comment "1controlled-stopped-onlygoal";
