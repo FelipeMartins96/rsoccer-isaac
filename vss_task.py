@@ -60,7 +60,7 @@ class VSS3v3(VecTask):
         self.max_episode_length = 400
 
         self.n_blue_robots = 3
-        self.n_controlled_robots = 3
+        self.n_controlled_robots = 1
         assert self.n_controlled_robots <= self.n_blue_robots
         self.n_yellow_robots = 3
         self.n_robots = self.n_blue_robots + self.n_yellow_robots
