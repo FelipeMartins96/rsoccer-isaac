@@ -9,6 +9,17 @@ from isaacgymenvs.tasks.base.vec_task import VecTask
 from torch import Tensor
 from isaacgym.torch_utils import torch_rand_float, quat_from_angle_axis, get_euler_xyz
 
+BLUE = gymapi.Vec3(0.0, 0.0, 1.0)
+YELLOW = gymapi.Vec3(1.0, 1.0, 0.0)
+
+RED = gymapi.Vec3(1.0, 0.0, 0.0)
+GREEN = gymapi.Vec3(0.0, 1.0, 0.0)
+PURPLE = gymapi.Vec3(1.0, 0.0, 1.0)
+CYAN = gymapi.Vec3(0.0, 1.0, 1.0)
+
+TEAM_COLORS = [BLUE, YELLOW]
+ID_COLORS = [RED, GREEN, PURPLE, CYAN]
+
 
 def get_cfg():
     cfg = {
@@ -49,7 +60,7 @@ class VSS3v3(VecTask):
         self.max_episode_length = 400
 
         self.n_blue_robots = 3
-        self.n_controlled_robots = 1
+        self.n_controlled_robots = 3
         assert self.n_controlled_robots <= self.n_blue_robots
         self.n_yellow_robots = 3
         self.n_robots = self.n_blue_robots + self.n_yellow_robots
@@ -121,15 +132,9 @@ class VSS3v3(VecTask):
 
             self._add_ball(_env, i)
             for j in range(self.n_blue_robots):
-                color = (
-                    gymapi.Vec3(0.0, 0.4, 0.2)
-                    if j < self.n_controlled_robots
-                    else gymapi.Vec3(0.0, 0.0, 0.3)
-                )
-                self._add_robot(_env, i, color, -(j + 1))
+                self._add_robot(_env, i, 0, j)
             for j in range(self.n_yellow_robots):
-                color = gymapi.Vec3(0.5, 0.55, 0.0)
-                self._add_robot(_env, i, color, j + 1)
+                self._add_robot(_env, i, 1, j)
             self._add_field(_env, i)
 
     def pre_physics_step(self, _actions):
@@ -308,7 +313,7 @@ class VSS3v3(VecTask):
         )
         self.gym.set_rigid_body_color(env, ball, 0, gymapi.MESH_VISUAL, color)
 
-    def _add_robot(self, env, env_id, color, pos_id):
+    def _add_robot(self, env, env_id, team, idx):
         options = gymapi.AssetOptions()
         root = os.path.dirname(os.path.abspath(__file__))
         rbt_asset = self.gym.load_asset(
@@ -317,13 +322,19 @@ class VSS3v3(VecTask):
             filename='assets/vss_robot.urdf',
             options=options,
         )
-        body, left_wheel, right_wheel = 0, 1, 2
+        body, left_wheel, right_wheel, tag_id, tag_team = 0, 1, 2, 3, 4
         initial_height = 0.024  # _z dimension
-        pose = gymapi.Transform(p=gymapi.Vec3(0.1 * pos_id, 0.0, initial_height))
+        pos_idx = idx + 1 if team else -(idx + 1)
+        pose = gymapi.Transform(p=gymapi.Vec3(0.1 * pos_idx, 0.0, initial_height))
         robot = self.gym.create_actor(
             env=env, asset=rbt_asset, pose=pose, group=env_id, filter=0b00, name='robot'
         )
-        self.gym.set_rigid_body_color(env, robot, body, gymapi.MESH_VISUAL, color)
+        self.gym.set_rigid_body_color(
+            env, robot, tag_id, gymapi.MESH_VISUAL, TEAM_COLORS[team]
+        )
+        self.gym.set_rigid_body_color(
+            env, robot, tag_team, gymapi.MESH_VISUAL, ID_COLORS[idx]
+        )
         props = self.gym.get_actor_rigid_shape_properties(env, robot)
         props[body].friction = 0.0
         props[body].filter = 0b0
