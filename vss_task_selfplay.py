@@ -26,9 +26,9 @@ def get_cfg():
         'rl_device': 'cuda:0',
         'sim_device': 'cuda:0',
         'graphics_device_id': 0,
-        'headless': True,
+        'headless': False,
         'virtual_screen_capture': False,
-        'force_render': False,
+        'force_render': True,
         'physics_engine': 'physx',
     }
 
@@ -60,8 +60,7 @@ class VSS3v3SelfPlay(VecTask):
         self.max_episode_length = 400
 
         self.n_blue_robots = 3
-        self.n_controlled_robots = 1
-        assert self.n_controlled_robots <= self.n_blue_robots
+        self.n_controlled_robots = self.n_blue_robots
         self.n_yellow_robots = 3
         self.n_robots = self.n_blue_robots + self.n_yellow_robots
         self.n_balls = 1  # does not support more
@@ -144,7 +143,7 @@ class VSS3v3SelfPlay(VecTask):
         env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
         self.progress_buf[env_ids] = 0
 
-        self.dof_velocity_buf[..., : self.num_actions] = _actions.to(self.device)
+        self.dof_velocity_buf[:] = _actions.to(self.device)
 
         act = self.dof_velocity_buf * self.robot_max_wheel_rad_s
         self.gym.set_dof_velocity_target_tensor(self.sim, gymtorch.unwrap_tensor(act))
@@ -171,6 +170,7 @@ class VSS3v3SelfPlay(VecTask):
         self.compute_observations()
 
     def compute_rewards_and_dones(self):
+        return
         # goal, grad, energy, move
         _, p_grad, _, p_move = compute_vss_rewards(
             self.ball_pos,
@@ -214,6 +214,7 @@ class VSS3v3SelfPlay(VecTask):
         )
 
     def compute_observations(self):
+        return
         self.obs_buf[..., :2] = self.ball_pos
         self.obs_buf[..., 2:4] = self.ball_vel
         self.obs_buf[..., 4 : -self.n_allies_actions] = compute_robots_obs(
@@ -308,9 +309,7 @@ class VSS3v3SelfPlay(VecTask):
             device=self.device,
             dtype=torch.float,
         )
-        self.reset_buf = torch.ones(
-            size=self.num_envs, device=self.device, dtype=torch.long
-        )
+        self.reset_buf = torch.ones(self.num_envs, device=self.device, dtype=torch.long)
         self.timeout_buf = torch.zeros(
             self.num_envs, device=self.device, dtype=torch.long
         )
