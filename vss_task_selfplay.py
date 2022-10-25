@@ -54,13 +54,13 @@ def get_cfg():
     return cfg
 
 
-class VSS3v3(VecTask):
+class VSS3v3SelfPlay(VecTask):
     def __init__(self, has_grad=True, has_energy=True, has_move=True):
         self.cfg = get_cfg()
         self.max_episode_length = 400
 
         self.n_blue_robots = 3
-        self.n_controlled_robots = 3
+        self.n_controlled_robots = 1
         assert self.n_controlled_robots <= self.n_blue_robots
         self.n_yellow_robots = 3
         self.n_robots = self.n_blue_robots + self.n_yellow_robots
@@ -78,7 +78,9 @@ class VSS3v3(VecTask):
         self.w_move = 1 if has_move else 0
 
         self.n_robot_dofs = 2
+        self.n_agents = 2
         self.n_allies_actions = self.n_blue_robots * self.n_robot_dofs
+        self.cfg['env']['numAgents'] = self.n_agents
         self.cfg['env']['numActions'] = 2 * self.n_controlled_robots
         self.cfg['env']['numObservations'] = (
             4 + (self.n_blue_robots + self.n_yellow_robots) * 7 + self.n_allies_actions
@@ -288,6 +290,37 @@ class VSS3v3(VecTask):
             self.rw_energy[env_ids] = 0.0
             self.rw_move[env_ids] = 0.0
             self.dof_velocity_buf[env_ids] *= 0.0
+
+    def allocate_buffers(self):
+        # allocate buffers
+        self.obs_buf = torch.zeros(
+            (self.num_envs, self.num_agents, self.num_obs),
+            device=self.device,
+            dtype=torch.float,
+        )
+        self.states_buf = torch.zeros(
+            (self.num_envs, self.num_agents, self.num_states),
+            device=self.device,
+            dtype=torch.float,
+        )
+        self.rew_buf = torch.zeros(
+            (self.num_envs, self.num_agents),
+            device=self.device,
+            dtype=torch.float,
+        )
+        self.reset_buf = torch.ones(
+            size=self.num_envs, device=self.device, dtype=torch.long
+        )
+        self.timeout_buf = torch.zeros(
+            self.num_envs, device=self.device, dtype=torch.long
+        )
+        self.progress_buf = torch.zeros(
+            self.num_envs, device=self.device, dtype=torch.long
+        )
+        self.randomize_buf = torch.zeros(
+            self.num_envs, device=self.device, dtype=torch.long
+        )
+        self.extras = {}
 
     def _add_ground(self):
         pp = gymapi.PlaneParams()
