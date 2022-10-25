@@ -15,9 +15,9 @@ def get_cfg():
         'rl_device': 'cuda:0',
         'sim_device': 'cuda:0',
         'graphics_device_id': 0,
-        'headless': True,
+        'headless': False,
         'virtual_screen_capture': False,
-        'force_render': False,
+        'force_render': True,
         'physics_engine': 'physx',
     }
 
@@ -63,9 +63,6 @@ class VSS3v3(VecTask):
         self.w_grad = 2 if has_grad else 0
         self.w_energy = 1 / 2000 if has_energy else 0
         self.w_move = 1 if has_move else 0
-
-        self.ou_theta = 0.1
-        self.ou_sigma = 0.2
 
         self.cfg['env']['numActions'] = 6
         self.cfg['env']['numObservations'] = (
@@ -135,21 +132,6 @@ class VSS3v3(VecTask):
         self.progress_buf[env_ids] = 0
 
         self.dof_velocity_buf[..., :6] = _actions.to(self.device)
-
-        # Send OU noise action to non controlled robots
-        # self.ou_buffer = (
-        #     self.ou_buffer
-        #     - self.ou_theta * self.ou_buffer
-        #     + torch.normal(
-        #         0.0,
-        #         self.ou_sigma,
-        #         size=self.ou_buffer.shape,
-        #         device=self.device,
-        #         requires_grad=False,
-        #     )
-        # )
-        # self.ou_buffer = torch.clamp(self.ou_buffer, -1.0, 1.0)
-        self.dof_velocity_buf[..., 6:] = self.ou_buffer
 
         act = self.dof_velocity_buf * self.robot_max_wheel_rad_s
         self.gym.set_dof_velocity_target_tensor(self.sim, gymtorch.unwrap_tensor(act))
@@ -293,7 +275,6 @@ class VSS3v3(VecTask):
             self.rw_energy[env_ids] = 0.0
             self.rw_move[env_ids] = 0.0
             self.dof_velocity_buf[env_ids] *= 0.0
-            self.ou_buffer[env_ids] *= 0.0
 
     def _add_ground(self):
         pp = gymapi.PlaneParams()
@@ -510,11 +491,6 @@ class VSS3v3(VecTask):
         )
         self.dof_velocity_buf = torch.zeros(
             (self.num_envs, self.n_robots * 2), device=self.device, requires_grad=False
-        )
-        self.ou_buffer = torch.zeros(
-            (self.num_envs, (self.n_robots - 3) * 2),
-            device=self.device,
-            requires_grad=False,
         )
 
     def _refresh_tensors(self):
