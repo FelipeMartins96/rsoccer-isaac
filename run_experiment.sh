@@ -1,1 +1,1 @@
-python train_task.py --comment "1controlled-stopped-onlygoal";
+python train_task_selfplay.py --comment "selfplay-1v1";
