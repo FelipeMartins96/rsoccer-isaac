@@ -26,9 +26,9 @@ def get_cfg():
         'rl_device': 'cuda:0',
         'sim_device': 'cuda:0',
         'graphics_device_id': 0,
-        'headless': False,
+        'headless': True,
         'virtual_screen_capture': False,
-        'force_render': True,
+        'force_render': False,
         'physics_engine': 'physx',
     }
 
@@ -107,8 +107,8 @@ class VSS3v3SelfPlay(VecTask):
         self.compute_observations()
 
         if self.viewer != None:
-            cam_pos = gymapi.Vec3(0.0, -0.2, 4)
-            cam_target = gymapi.Vec3(0.0, 0.0, 0.0)
+            cam_pos = gymapi.Vec3(2, 0.0, 5)
+            cam_target = gymapi.Vec3(2, 1.0, 0.0)
             self.gym.viewer_camera_look_at(self.viewer, None, cam_pos, cam_target)
 
     def create_sim(self):
