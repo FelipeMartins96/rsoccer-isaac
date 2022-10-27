@@ -10,6 +10,7 @@ import numpy as np
 import time
 from copy import deepcopy
 
+from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
 from torch.utils.tensorboard import SummaryWriter
 from isaacgymenvs.learning.replay_buffer import ReplayBuffer
 from vss_task_selfplay import VSS3v3SelfPlay
@@ -108,6 +109,8 @@ def train(args) -> None:
         [task.num_envs, 12], dtype=torch.float32, device=task.rl_device
     )
 
+    frames = []
+    record_flag = 1
     for global_step in range(total_timesteps):
         # ALGO LOGIC: put action logic here
 
@@ -126,6 +129,17 @@ def train(args) -> None:
 
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, dones, infos = task.step(actions_buf)
+
+        if global_step % 30000 == 0:
+            record_flag = 1
+        if record_flag:
+            frames.append(task.render(mode='rgb_array'))
+            record_flag += 1
+            if record_flag > 200:
+                clip = ImageSequenceClip(frames, fps=20)
+                clip.write_videofile(f'{writer.get_logdir()}/video-{global_step}.mp4')
+                frames = []
+                record_flag = 0
 
         writer.add_scalar(
             "charts/mean_action_m1", actions[:, 0].mean().item(), global_step
