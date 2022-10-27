@@ -66,7 +66,7 @@ def train(args) -> None:
     gamma = 0.99
     tau = 0.005
 
-    n_actions = 2
+    n_actions = 6
 
     actor = Actor(task, n_actions).to(device=device)
     qf1 = QNetwork(task, n_actions).to(device=device)

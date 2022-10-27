@@ -1,1 +1,1 @@
-python train_task_selfplay.py --comment "selfplay-1v1";
+python train_task_selfplay.py --comment "selfplay-3v3";
