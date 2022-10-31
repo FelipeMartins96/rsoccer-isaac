@@ -26,7 +26,7 @@ def get_cfg():
         'rl_device': 'cuda:0',
         'sim_device': 'cuda:0',
         'graphics_device_id': 0,
-        'headless': True,
+        'headless': False,
         'virtual_screen_capture': False,
         'force_render': False,
         'physics_engine': 'physx',
@@ -54,14 +54,13 @@ def get_cfg():
     return cfg
 
 
-class VSS3v3(VecTask):
+class VSS3v3SelfPlay(VecTask):
     def __init__(self, has_grad=True, has_energy=True, has_move=True):
         self.cfg = get_cfg()
         self.max_episode_length = 400
 
         self.n_blue_robots = 3
-        self.n_controlled_robots = 1
-        assert self.n_controlled_robots <= self.n_blue_robots
+        self.n_controlled_robots = self.n_blue_robots
         self.n_yellow_robots = 3
         self.n_robots = self.n_blue_robots + self.n_yellow_robots
         self.n_balls = 1  # does not support more
@@ -78,7 +77,9 @@ class VSS3v3(VecTask):
         self.w_move = 1 if has_move else 0
 
         self.n_robot_dofs = 2
+        self.n_agents = 2
         self.n_allies_actions = self.n_blue_robots * self.n_robot_dofs
+        self.cfg['env']['numAgents'] = self.n_agents
         self.cfg['env']['numActions'] = 2 * self.n_controlled_robots
         self.cfg['env']['numObservations'] = (
             4 + (self.n_blue_robots + self.n_yellow_robots) * 7 + self.n_allies_actions
@@ -106,8 +107,8 @@ class VSS3v3(VecTask):
         self.compute_observations()
 
         if self.viewer != None:
-            cam_pos = gymapi.Vec3(0.0, -0.2, 4)
-            cam_target = gymapi.Vec3(0.0, 0.0, 0.0)
+            cam_pos = gymapi.Vec3(2, 0.0, 5)
+            cam_target = gymapi.Vec3(2, 1.0, 0.0)
             self.gym.viewer_camera_look_at(self.viewer, None, cam_pos, cam_target)
 
     def create_sim(self):
@@ -142,7 +143,7 @@ class VSS3v3(VecTask):
         env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
         self.progress_buf[env_ids] = 0
 
-        self.dof_velocity_buf[..., : self.num_actions] = _actions.to(self.device)
+        self.dof_velocity_buf[:] = _actions.to(self.device)
 
         act = self.dof_velocity_buf * self.robot_max_wheel_rad_s
         self.gym.set_dof_velocity_target_tensor(self.sim, gymtorch.unwrap_tensor(act))
@@ -174,7 +175,7 @@ class VSS3v3(VecTask):
             self.ball_pos,
             self.robots_pos[:, 0, :],
             self.dof_velocity_buf,
-            self.rew_buf,
+            self.rew_buf[:, 0],
             self.yellow_goal,
             self.field_width,
             self.goal_height,
@@ -184,7 +185,7 @@ class VSS3v3(VecTask):
             self.ball_pos,
             self.robots_pos[:, 0, :],
             self.dof_velocity_buf,
-            self.rew_buf,
+            self.rew_buf[:, 0],
             self.yellow_goal,
             self.field_width,
             self.goal_height,
@@ -200,7 +201,9 @@ class VSS3v3(VecTask):
         self.rw_energy += energy_rw
         self.rw_move += move_rw
 
-        self.rew_buf = goal_rw + grad_rw + energy_rw + move_rw
+        rw_sum = (goal_rw + grad_rw).view(-1, 1)
+
+        self.rew_buf[:] = torch.cat((rw_sum, -rw_sum), dim=1)
 
         self.reset_buf = compute_vss_dones(
             ball_pos=self.ball_pos,
@@ -212,9 +215,9 @@ class VSS3v3(VecTask):
         )
 
     def compute_observations(self):
-        self.obs_buf[..., :2] = self.ball_pos
-        self.obs_buf[..., 2:4] = self.ball_vel
-        self.obs_buf[..., 4 : -self.n_allies_actions] = compute_robots_obs(
+        self.obs_buf[:, 0, :2] = self.ball_pos
+        self.obs_buf[:, 0, 2:4] = self.ball_vel
+        self.obs_buf[:, 0, 4 : -self.n_allies_actions] = compute_robots_obs(
             self.robots_pos,
             self.robots_vel,
             self.robots_quats,
@@ -222,8 +225,27 @@ class VSS3v3(VecTask):
             self.n_robots,
             self.num_envs,
         )
-        self.obs_buf[..., -self.n_allies_actions :] = self.dof_velocity_buf[
+        self.obs_buf[:, 0, -self.n_allies_actions :] = self.dof_velocity_buf[
             ..., : self.n_allies_actions
+        ]
+
+        # getting yellow obs by mirroring blue obs
+        self.obs_buf[:, 1, :4] = -self.obs_buf[:, 0, :4]
+        mirror_obs = (
+            self.obs_buf[:, 0, 4 : -self.n_allies_actions].view(
+                self.num_envs, self.n_robots, -1
+            )
+            * self.mirror_tensor
+        )
+        yellow_obs = self.obs_buf[:, 1, 4 : -self.n_allies_actions].view(
+            self.num_envs, self.n_robots, -1
+        )
+        yellow_obs[:, : self.n_yellow_robots, :] = mirror_obs[
+            :, self.n_yellow_robots :, :
+        ]
+        yellow_obs[:, self.n_blue_robots :, :] = mirror_obs[:, : self.n_blue_robots, :]
+        self.obs_buf[:, 1, -self.n_allies_actions :] = self.dof_velocity_buf[
+            ..., -self.n_allies_actions :
         ]
 
     def reset_dones(self):
@@ -288,6 +310,35 @@ class VSS3v3(VecTask):
             self.rw_energy[env_ids] = 0.0
             self.rw_move[env_ids] = 0.0
             self.dof_velocity_buf[env_ids] *= 0.0
+
+    def allocate_buffers(self):
+        # allocate buffers
+        self.obs_buf = torch.zeros(
+            (self.num_envs, self.num_agents, self.num_obs),
+            device=self.device,
+            dtype=torch.float,
+        )
+        self.states_buf = torch.zeros(
+            (self.num_envs, self.num_agents, self.num_states),
+            device=self.device,
+            dtype=torch.float,
+        )
+        self.rew_buf = torch.zeros(
+            (self.num_envs, self.num_agents),
+            device=self.device,
+            dtype=torch.float,
+        )
+        self.reset_buf = torch.ones(self.num_envs, device=self.device, dtype=torch.long)
+        self.timeout_buf = torch.zeros(
+            self.num_envs, device=self.device, dtype=torch.long
+        )
+        self.progress_buf = torch.zeros(
+            self.num_envs, device=self.device, dtype=torch.long
+        )
+        self.randomize_buf = torch.zeros(
+            self.num_envs, device=self.device, dtype=torch.long
+        )
+        self.extras = {}
 
     def _add_ground(self):
         pp = gymapi.PlaneParams()
@@ -497,19 +548,25 @@ class VSS3v3(VecTask):
         )
 
         self.rw_goal = torch.zeros_like(
-            self.rew_buf, device=self.device, requires_grad=False
+            self.rew_buf[:, 0], device=self.device, requires_grad=False
         )
         self.rw_grad = torch.zeros_like(
-            self.rew_buf, device=self.device, requires_grad=False
+            self.rew_buf[:, 0], device=self.device, requires_grad=False
         )
         self.rw_energy = torch.zeros_like(
-            self.rew_buf, device=self.device, requires_grad=False
+            self.rew_buf[:, 0], device=self.device, requires_grad=False
         )
         self.rw_move = torch.zeros_like(
-            self.rew_buf, device=self.device, requires_grad=False
+            self.rew_buf[:, 0], device=self.device, requires_grad=False
         )
         self.dof_velocity_buf = torch.zeros(
             (self.num_envs, self.n_robots * 2), device=self.device, requires_grad=False
+        )
+        self.mirror_tensor = torch.tensor(
+            [-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, 1.0],
+            dtype=torch.float,
+            device=self.device,
+            requires_grad=False,
         )
 
     def _refresh_tensors(self):

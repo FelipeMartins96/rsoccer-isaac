@@ -10,17 +10,17 @@ import numpy as np
 import time
 from copy import deepcopy
 
+from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
 from torch.utils.tensorboard import SummaryWriter
 from isaacgymenvs.learning.replay_buffer import ReplayBuffer
-from vss_task import VSS3v3
+from vss_task import VSS3v3SelfPlay
 
 # ALGO LOGIC: initialize agent here:
 class QNetwork(nn.Module):
-    def __init__(self, env):
+    def __init__(self, env, n_actions):
         super().__init__()
         self.fc1 = nn.Linear(
-            np.array(env.observation_space.shape).prod()
-            + np.prod(env.action_space.shape),
+            np.array(env.observation_space.shape).prod() + n_actions,
             256,
         )
         self.fc2 = nn.Linear(256, 256)
@@ -37,12 +37,12 @@ class QNetwork(nn.Module):
 
 
 class Actor(nn.Module):
-    def __init__(self, env):
+    def __init__(self, env, n_actions):
         super().__init__()
         self.fc1 = nn.Linear(np.array(env.observation_space.shape).prod(), 256)
         self.fc2 = nn.Linear(256, 256)
         self.fc3 = nn.Linear(256, 256)
-        self.fc_mu = nn.Linear(256, np.prod(env.action_space.shape))
+        self.fc_mu = nn.Linear(256, n_actions)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
@@ -53,7 +53,9 @@ class Actor(nn.Module):
 
 
 def train(args) -> None:
-    task = VSS3v3(has_grad=args.grad, has_energy=args.energy, has_move=args.move)
+    task = VSS3v3SelfPlay(
+        has_grad=args.grad, has_energy=args.energy, has_move=args.move
+    )
 
     writer = SummaryWriter(comment=args.comment)
     device = task.cfg['rl_device']
@@ -64,10 +66,12 @@ def train(args) -> None:
     gamma = 0.99
     tau = 0.005
 
-    actor = Actor(task).to(device=device)
-    qf1 = QNetwork(task).to(device=device)
-    qf1_target = QNetwork(task).to(device=device)
-    target_actor = Actor(task).to(device=device)
+    n_actions = 6
+
+    actor = Actor(task, n_actions).to(device=device)
+    qf1 = QNetwork(task, n_actions).to(device=device)
+    qf1_target = QNetwork(task, n_actions).to(device=device)
+    target_actor = Actor(task, n_actions).to(device=device)
     target_actor.load_state_dict(actor.state_dict())
     qf1_target.load_state_dict(qf1.state_dict())
     q_optimizer = optim.Adam(list(qf1.parameters()), lr=lr)
@@ -88,15 +92,25 @@ def train(args) -> None:
             + torch.normal(
                 0.0,
                 ou_sigma,
-                size=(task.num_envs,) + task.action_space.shape,
+                size=(task.num_envs, task.num_agents, n_actions),
                 device=device,
                 requires_grad=False,
             )
         )
         return noise.clamp(-1.0, 1.0)
 
-    noise = task.zero_actions()
+    noise = torch.zeros(
+        [task.num_envs, task.num_agents, n_actions],
+        dtype=torch.float32,
+        device=task.rl_device,
+    )
 
+    actions_buf = torch.zeros(
+        [task.num_envs, 12], dtype=torch.float32, device=task.rl_device
+    )
+
+    frames = []
+    record_flag = 1
     for global_step in range(total_timesteps):
         # ALGO LOGIC: put action logic here
 
@@ -108,8 +122,24 @@ def train(args) -> None:
                 actions = actor(obs['obs']) + noise
 
         actions = torch.clamp(actions, -1.0, 1.0)
+        actions_buf[:, :n_actions] = actions[:, 0]
+        actions_buf[
+            :, task.n_blue_robots * 2 : task.n_blue_robots * 2 + n_actions
+        ] = actions[:, 1]
+
         # TRY NOT TO MODIFY: execute the game and log data.
-        next_obs, rewards, dones, infos = task.step(actions)
+        next_obs, rewards, dones, infos = task.step(actions_buf)
+
+        if global_step % 30000 == 0:
+            record_flag = 1
+        if record_flag:
+            frames.append(task.render(mode='rgb_array'))
+            record_flag += 1
+            if record_flag > 200:
+                clip = ImageSequenceClip(frames, fps=20)
+                clip.write_videofile(f'{writer.get_logdir()}/video-{global_step}.mp4')
+                frames = []
+                record_flag = 0
 
         writer.add_scalar(
             "charts/mean_action_m1", actions[:, 0].mean().item(), global_step
@@ -154,10 +184,19 @@ def train(args) -> None:
         # TRY NOT TO MODIFY: save data to replay buffer;
         rb.store(
             {
-                'observations': obs['obs'],
-                'next_observations': real_next_obs,
-                'actions': actions,
-                'rewards': rewards,
+                'observations': obs['obs'][:, 0],
+                'next_observations': real_next_obs[:, 0],
+                'actions': actions[:, 0],
+                'rewards': rewards[:, 0],
+                'dones': dones,
+            }
+        )
+        rb.store(
+            {
+                'observations': obs['obs'][:, 1],
+                'next_observations': real_next_obs[:, 1],
+                'actions': actions[:, 1],
+                'rewards': rewards[:, 1],
                 'dones': dones,
             }
         )

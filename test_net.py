@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from vss_task_selfplay import VSS3v3SelfPlay
+from vss_task import VSS3v3SelfPlay
 from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
 
 

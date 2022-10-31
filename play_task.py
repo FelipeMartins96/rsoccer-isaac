@@ -1,6 +1,6 @@
 import isaacgym
 import torch
-from vss_task_selfplay import VSS3v3SelfPlay
+from vss_task import VSS3v3SelfPlay
 
 
 def play_random_policy():
@@ -21,6 +21,7 @@ def play_random_policy():
 
     while not task.gym.query_viewer_has_closed(task.viewer):
         task.step(random_vec_actions().view(task.num_envs, -1))
+        task.render()
 
 
 if __name__ == '__main__':
