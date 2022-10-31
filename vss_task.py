@@ -55,7 +55,7 @@ def get_cfg():
 
 
 class VSS3v3SelfPlay(VecTask):
-    def __init__(self, has_grad=True, has_energy=True, has_move=True):
+    def __init__(self, has_grad=True):
         self.cfg = get_cfg()
         self.max_episode_length = 400
 
@@ -73,8 +73,6 @@ class VSS3v3SelfPlay(VecTask):
 
         self.w_goal = 5
         self.w_grad = 2 if has_grad else 0
-        self.w_energy = 1 / 2000 if has_energy else 0
-        self.w_move = 1 if has_move else 0
 
         self.n_robot_dofs = 2
         self.n_agents = 2
@@ -159,8 +157,6 @@ class VSS3v3SelfPlay(VecTask):
         self.extras["terminal_rewards"] = {
             "goal": self.rw_goal.clone().to(self.rl_device),
             "grad": self.rw_grad.clone().to(self.rl_device),
-            "energy": self.rw_energy.clone().to(self.rl_device),
-            "move": self.rw_move.clone().to(self.rl_device),
         }
         self.extras["progress_buffer"] = (
             self.progress_buf.clone().to(self.rl_device).float()
@@ -171,20 +167,16 @@ class VSS3v3SelfPlay(VecTask):
 
     def compute_rewards_and_dones(self):
         # goal, grad, energy, move
-        _, p_grad, _, p_move = compute_vss_rewards(
+        _, p_grad = compute_vss_rewards(
             self.ball_pos,
-            self.robots_pos[:, 0, :],
-            self.dof_velocity_buf,
             self.rew_buf[:, 0],
             self.yellow_goal,
             self.field_width,
             self.goal_height,
         )
         self._refresh_tensors()
-        goal, grad, energy, move = compute_vss_rewards(
+        goal, grad = compute_vss_rewards(
             self.ball_pos,
-            self.robots_pos[:, 0, :],
-            self.dof_velocity_buf,
             self.rew_buf[:, 0],
             self.yellow_goal,
             self.field_width,
@@ -193,13 +185,9 @@ class VSS3v3SelfPlay(VecTask):
 
         goal_rw = self.w_goal * goal
         grad_rw = self.w_grad * (grad - p_grad)
-        energy_rw = self.w_energy * energy
-        move_rw = self.w_move * (move - p_move)
 
         self.rw_goal += goal_rw
         self.rw_grad += grad_rw
-        self.rw_energy += energy_rw
-        self.rw_move += move_rw
 
         rw_sum = (goal_rw + grad_rw).view(-1, 1)
 
@@ -307,8 +295,6 @@ class VSS3v3SelfPlay(VecTask):
 
             self.rw_goal[env_ids] = 0.0
             self.rw_grad[env_ids] = 0.0
-            self.rw_energy[env_ids] = 0.0
-            self.rw_move[env_ids] = 0.0
             self.dof_velocity_buf[env_ids] *= 0.0
 
     def allocate_buffers(self):
@@ -553,12 +539,6 @@ class VSS3v3SelfPlay(VecTask):
         self.rw_grad = torch.zeros_like(
             self.rew_buf[:, 0], device=self.device, requires_grad=False
         )
-        self.rw_energy = torch.zeros_like(
-            self.rew_buf[:, 0], device=self.device, requires_grad=False
-        )
-        self.rw_move = torch.zeros_like(
-            self.rew_buf[:, 0], device=self.device, requires_grad=False
-        )
         self.dof_velocity_buf = torch.zeros(
             (self.num_envs, self.n_robots * 2), device=self.device, requires_grad=False
         )
@@ -579,10 +559,8 @@ class VSS3v3SelfPlay(VecTask):
 
 
 @torch.jit.script
-def compute_vss_rewards(
-    ball_pos, robot_pos, actions, rew_buf, yellow_goal, field_width, goal_height
-):
-    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, float, float) -> Tuple[Tensor, Tensor, Tensor, Tensor]
+def compute_vss_rewards(ball_pos, rew_buf, yellow_goal, field_width, goal_height):
+    # type: (Tensor, Tensor, Tensor, float, float) -> Tuple[Tensor, Tensor]
     # Negative what we want to reduce, Positive what we want to increase
 
     zeros = torch.zeros_like(rew_buf)
@@ -597,19 +575,13 @@ def compute_vss_rewards(
     goal = torch.where(is_goal_blue, ones, zeros)
     goal = torch.where(is_goal_yellow, -ones, goal)
 
-    # MOVE
-    move = -torch.norm(robot_pos[:, :] - ball_pos, dim=1)
-
     # GRAD
     dist_ball_left_goal = torch.norm(ball_pos - (-yellow_goal), dim=1)
     dist_ball_right_goal = torch.norm(ball_pos - yellow_goal, dim=1)
     grad = dist_ball_left_goal - dist_ball_right_goal
 
-    # ENERGY
-    energy = -torch.sum(torch.abs(actions), dim=1)
-
-    # goal, grad, energy, move
-    return goal, grad, energy, move
+    # goal, grad
+    return goal, grad
 
 
 @torch.jit.script
