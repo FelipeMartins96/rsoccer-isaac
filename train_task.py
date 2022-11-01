@@ -53,9 +53,7 @@ class Actor(nn.Module):
 
 
 def train(args) -> None:
-    task = VSS3v3SelfPlay(
-        has_grad=args.grad, has_energy=args.energy, has_move=args.move
-    )
+    task = VSS3v3SelfPlay(has_grad=args.grad, record=args.record)
 
     writer = SummaryWriter(comment=args.comment)
     device = task.cfg['rl_device']
@@ -65,8 +63,11 @@ def train(args) -> None:
     batch_size = 4096
     gamma = 0.99
     tau = 0.005
+    rb_size = 4000000
 
-    n_actions = 6
+    n_controlled_robots = 1
+    n_actions = n_controlled_robots * 2
+    self_play = args.selfplay
 
     actor = Actor(task, n_actions).to(device=device)
     qf1 = QNetwork(task, n_actions).to(device=device)
@@ -77,7 +78,7 @@ def train(args) -> None:
     q_optimizer = optim.Adam(list(qf1.parameters()), lr=lr)
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=lr)
 
-    rb = ReplayBuffer(4000000, device)
+    rb = ReplayBuffer(rb_size, device)
     start_time = time.time()
     # TRY NOT TO MODIFY: start the game
     obs = deepcopy(task.reset())
@@ -92,22 +93,17 @@ def train(args) -> None:
             + torch.normal(
                 0.0,
                 ou_sigma,
-                size=(task.num_envs, task.num_agents, n_actions),
+                size=prev.size(),
                 device=device,
                 requires_grad=False,
             )
         )
         return noise.clamp(-1.0, 1.0)
 
-    noise = torch.zeros(
-        [task.num_envs, task.num_agents, n_actions],
-        dtype=torch.float32,
-        device=task.rl_device,
-    )
+    exp_noise = torch.zeros((task.num_envs, task.num_agents, n_actions), device=device)
+    exp_noise = exp_noise[:, 0:1] if not self_play else exp_noise
 
-    actions_buf = torch.zeros(
-        [task.num_envs, 12], dtype=torch.float32, device=task.rl_device
-    )
+    actions_buf = task.zero_actions()
 
     frames = []
     record_flag = 1
@@ -115,24 +111,30 @@ def train(args) -> None:
         # ALGO LOGIC: put action logic here
 
         with torch.no_grad():
-            noise = random_ou(noise)
+            exp_noise = random_ou(exp_noise)
             if rb.get_total_count() < learning_starts:
-                actions = noise
+                actions = exp_noise
             else:
-                actions = actor(obs['obs']) + noise
+                if self_play:
+                    actions = actor(obs['obs']) + exp_noise
+                else:
+                    actions = actor(obs['obs'][:, 0:1]) + exp_noise
 
         actions = torch.clamp(actions, -1.0, 1.0)
+
         actions_buf[:, :n_actions] = actions[:, 0]
-        actions_buf[
-            :, task.n_blue_robots * 2 : task.n_blue_robots * 2 + n_actions
-        ] = actions[:, 1]
+        if self_play:
+            actions_buf[
+                :, task.n_team_actions : task.n_team_actions + n_actions
+            ] = actions[:, 1]
 
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, dones, infos = task.step(actions_buf)
+        task.render()
 
         if global_step % 30000 == 0:
             record_flag = 1
-        if record_flag:
+        if args.record and record_flag:
             frames.append(task.render(mode='rgb_array'))
             record_flag += 1
             if record_flag > 200:
@@ -142,10 +144,10 @@ def train(args) -> None:
                 record_flag = 0
 
         writer.add_scalar(
-            "charts/mean_action_m1", actions[:, 0].mean().item(), global_step
+            "charts/mean_action_m1", actions[:, 0, 0].mean().item(), global_step
         )
         writer.add_scalar(
-            "charts/mean_action_m2", actions[:, 1].mean().item(), global_step
+            "charts/mean_action_m2", actions[:, 0, 1].mean().item(), global_step
         )
 
         # # TRY NOT TO MODIFY: record rewards for plotting purposes
@@ -167,19 +169,9 @@ def train(args) -> None:
                 infos['terminal_rewards']['grad'][env_ids].mean(),
                 global_step,
             )
-            writer.add_scalar(
-                "charts/episodic_energy",
-                infos['terminal_rewards']['energy'][env_ids].mean(),
-                global_step,
-            )
-            writer.add_scalar(
-                "charts/episodic_move",
-                infos['terminal_rewards']['move'][env_ids].mean(),
-                global_step,
-            )
             real_next_obs[env_ids] = infos["terminal_observation"][env_ids]
             dones = dones.logical_and(infos["time_outs"].logical_not())
-            noise[env_ids] *= 0.0
+            exp_noise[env_ids] *= 0.0
 
         # TRY NOT TO MODIFY: save data to replay buffer;
         rb.store(
@@ -191,15 +183,16 @@ def train(args) -> None:
                 'dones': dones,
             }
         )
-        rb.store(
-            {
-                'observations': obs['obs'][:, 1],
-                'next_observations': real_next_obs[:, 1],
-                'actions': actions[:, 1],
-                'rewards': rewards[:, 1],
-                'dones': dones,
-            }
-        )
+        if self_play:
+            rb.store(
+                {
+                    'observations': obs['obs'][:, 1],
+                    'next_observations': real_next_obs[:, 1],
+                    'actions': actions[:, 1],
+                    'rewards': rewards[:, 1],
+                    'dones': dones,
+                }
+            )
 
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
         obs = deepcopy(next_obs)
@@ -247,7 +240,7 @@ def train(args) -> None:
                 writer.add_scalar(
                     "losses/qf1_values", qf1_a_values.mean().item(), global_step
                 )
-                print("SPS:", int(global_step / (time.time() - start_time)))
+                # print("SPS:", int(global_step / (time.time() - start_time)))
                 writer.add_scalar(
                     "charts/SPS",
                     int(global_step / (time.time() - start_time)),
@@ -267,9 +260,9 @@ def train(args) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--move", default=False, action="store_true")
     parser.add_argument("--grad", default=False, action="store_true")
-    parser.add_argument("--energy", default=False, action="store_true")
+    parser.add_argument("--record", default=False, action="store_true")
+    parser.add_argument("--selfplay", default=False, action="store_true")
     parser.add_argument("--comment", default='', type=str)
     args = parser.parse_args()
     train(args)
