@@ -8,7 +8,7 @@ def play_random_policy():
 
     def random_vec_actions():
         a = torch.rand(
-            (task.num_envs, task.num_agents) + task.action_space.shape,
+            (task.num_envs) + task.action_space.shape,
             device=task.rl_device,
         )
         return (a - 0.5) * 2
@@ -20,7 +20,7 @@ def play_random_policy():
         return a * value
 
     while not task.gym.query_viewer_has_closed(task.viewer):
-        task.step(random_vec_actions().view(task.num_envs, -1))
+        task.step(task.zero_actions())
         task.render()
 
 

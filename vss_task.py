@@ -59,28 +59,32 @@ class VSS3v3SelfPlay(VecTask):
         self.cfg = get_cfg()
         self.max_episode_length = 400
 
-        self.n_blue_robots = 3
-        self.n_controlled_robots = self.n_blue_robots
-        self.n_yellow_robots = 3
-        self.n_robots = self.n_blue_robots + self.n_yellow_robots
+        self.n_robots_per_team = 3
+        self.n_robot_dofs = 2
+
+        # FIXED VALUES
+        self.n_teams = 2
         self.n_balls = 1  # does not support more
+
+        self.n_robots = self.n_robots_per_team * self.n_teams
+
         self.env_total_width = 2
         self.env_total_height = 1.5
         self.robot_max_wheel_rad_s = 100.0
         self.field_width = 1.5
         self.field_height = 1.3
         self.goal_height = 0.4
+        self.min_dist = 0.07
 
         self.w_goal = 5
         self.w_grad = 2 if has_grad else 0
 
-        self.n_robot_dofs = 2
-        self.n_agents = 2
-        self.n_allies_actions = self.n_blue_robots * self.n_robot_dofs
+        self.n_agents = self.n_teams
+        self.n_team_actions = self.n_robots_per_team * self.n_robot_dofs
         self.cfg['env']['numAgents'] = self.n_agents
-        self.cfg['env']['numActions'] = 2 * self.n_controlled_robots
+        self.cfg['env']['numActions'] = self.n_team_actions * self.n_teams
         self.cfg['env']['numObservations'] = (
-            4 + (self.n_blue_robots + self.n_yellow_robots) * 7 + self.n_allies_actions
+            4 + (self.n_robots) * 7 + self.n_team_actions
         )
 
         super().__init__(
@@ -97,7 +101,6 @@ class VSS3v3SelfPlay(VecTask):
         self.combinations = torch.tensor(
             list(combinations(entities_ids, 2)), device=self.device
         )
-        self.min_dist = 0.07
 
         self._acquire_tensors()
         self._refresh_tensors()
@@ -130,10 +133,13 @@ class VSS3v3SelfPlay(VecTask):
             )
 
             self._add_ball(_env, i)
-            for j in range(self.n_blue_robots):
+            # Blue Robots
+            for j in range(self.n_robots_per_team):
                 self._add_robot(_env, i, 0, j)
-            for j in range(self.n_yellow_robots):
+            # Yellow Robots
+            for j in range(self.n_robots_per_team):
                 self._add_robot(_env, i, 1, j)
+
             self._add_field(_env, i)
 
     def pre_physics_step(self, _actions):
@@ -166,7 +172,7 @@ class VSS3v3SelfPlay(VecTask):
         self.compute_observations()
 
     def compute_rewards_and_dones(self):
-        # goal, grad, energy, move
+        # goal, grad
         _, p_grad = compute_vss_rewards(
             self.ball_pos,
             self.rew_buf[:, 0],
@@ -205,7 +211,7 @@ class VSS3v3SelfPlay(VecTask):
     def compute_observations(self):
         self.obs_buf[:, 0, :2] = self.ball_pos
         self.obs_buf[:, 0, 2:4] = self.ball_vel
-        self.obs_buf[:, 0, 4 : -self.n_allies_actions] = compute_robots_obs(
+        self.obs_buf[:, 0, 4 : -self.n_team_actions] = compute_robots_obs(
             self.robots_pos,
             self.robots_vel,
             self.robots_quats,
@@ -213,27 +219,29 @@ class VSS3v3SelfPlay(VecTask):
             self.n_robots,
             self.num_envs,
         )
-        self.obs_buf[:, 0, -self.n_allies_actions :] = self.dof_velocity_buf[
-            ..., : self.n_allies_actions
+        self.obs_buf[:, 0, -self.n_team_actions :] = self.dof_velocity_buf[
+            ..., : self.n_team_actions
         ]
 
         # getting yellow obs by mirroring blue obs
         self.obs_buf[:, 1, :4] = -self.obs_buf[:, 0, :4]
         mirror_obs = (
-            self.obs_buf[:, 0, 4 : -self.n_allies_actions].view(
+            self.obs_buf[:, 0, 4 : -self.n_team_actions].view(
                 self.num_envs, self.n_robots, -1
             )
             * self.mirror_tensor
         )
-        yellow_obs = self.obs_buf[:, 1, 4 : -self.n_allies_actions].view(
+        yellow_obs = self.obs_buf[:, 1, 4 : -self.n_team_actions].view(
             self.num_envs, self.n_robots, -1
         )
-        yellow_obs[:, : self.n_yellow_robots, :] = mirror_obs[
-            :, self.n_yellow_robots :, :
+        yellow_obs[:, : self.n_robots_per_team, :] = mirror_obs[
+            :, self.n_robots_per_team :, :
         ]
-        yellow_obs[:, self.n_blue_robots :, :] = mirror_obs[:, : self.n_blue_robots, :]
-        self.obs_buf[:, 1, -self.n_allies_actions :] = self.dof_velocity_buf[
-            ..., -self.n_allies_actions :
+        yellow_obs[:, self.n_robots_per_team :, :] = mirror_obs[
+            :, : self.n_robots_per_team, :
+        ]
+        self.obs_buf[:, 1, -self.n_team_actions :] = self.dof_velocity_buf[
+            ..., -self.n_team_actions :
         ]
 
     def reset_dones(self):
@@ -506,12 +514,10 @@ class VSS3v3SelfPlay(VecTask):
             - self.min_dist
         )
 
-        n_balls = 1
-        n_robots = self.n_blue_robots + self.n_yellow_robots
         n_field_actors = 8  # 2 side walls, 4 end walls, 2 goal walls
-        self.num_actors = n_balls + n_robots + n_field_actors
+        self.num_actors = self.n_balls + self.n_robots + n_field_actors
         self.ball = 0
-        self.robots = slice(n_balls, n_balls + n_robots)
+        self.robots = slice(self.n_balls, self.n_balls + self.n_robots)
 
         _root_state = self.gym.acquire_actor_root_state_tensor(self.sim)
 
