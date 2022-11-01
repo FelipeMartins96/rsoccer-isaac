@@ -55,7 +55,7 @@ def get_cfg():
 
 
 class VSS3v3SelfPlay(VecTask):
-    def __init__(self, has_grad=True):
+    def __init__(self, has_grad=True, record=False):
         self.cfg = get_cfg()
         self.max_episode_length = 400
 
@@ -86,6 +86,8 @@ class VSS3v3SelfPlay(VecTask):
         self.cfg['env']['numObservations'] = (
             4 + (self.n_robots) * 7 + self.n_team_actions
         )
+
+        self.cfg['virtual_screen_capture'] = record
 
         super().__init__(
             config=self.cfg,
