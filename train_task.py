@@ -65,7 +65,8 @@ def train(args) -> None:
     tau = 0.005
     rb_size = 4000000
 
-    n_controlled_robots = 1
+    n_controlled_robots = args.n_controlled
+    assert n_controlled_robots <= 3
     n_actions = n_controlled_robots * 2
     self_play = args.selfplay
 
@@ -102,6 +103,7 @@ def train(args) -> None:
 
     exp_noise = torch.zeros((task.num_envs, task.num_agents, n_actions), device=device)
     exp_noise = exp_noise[:, 0:1] if not self_play else exp_noise
+    env_noise = task.zero_actions()
 
     actions_buf = task.zero_actions()
 
@@ -112,6 +114,7 @@ def train(args) -> None:
 
         with torch.no_grad():
             exp_noise = random_ou(exp_noise)
+            env_noise = random_ou(env_noise)
             if rb.get_total_count() < learning_starts:
                 actions = exp_noise
             else:
@@ -122,6 +125,9 @@ def train(args) -> None:
 
         actions = torch.clamp(actions, -1.0, 1.0)
 
+        if args.env_ou:
+            actions_buf[:] = env_noise[:]
+
         actions_buf[:, :n_actions] = actions[:, 0]
         if self_play:
             actions_buf[
@@ -130,6 +136,9 @@ def train(args) -> None:
 
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, dones, infos = task.step(actions_buf)
+
+        if args.render and not args.record:
+            task.render()
 
         if global_step % 30000 == 0:
             record_flag = 1
@@ -171,6 +180,7 @@ def train(args) -> None:
             real_next_obs[env_ids] = infos["terminal_observation"][env_ids]
             dones = dones.logical_and(infos["time_outs"].logical_not())
             exp_noise[env_ids] *= 0.0
+            env_noise[env_ids] *= 0.0
 
         # TRY NOT TO MODIFY: save data to replay buffer;
         rb.store(
@@ -261,7 +271,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--grad", default=False, action="store_true")
     parser.add_argument("--record", default=False, action="store_true")
+    parser.add_argument("--render", default=False, action="store_true")
     parser.add_argument("--selfplay", default=False, action="store_true")
+    parser.add_argument("--env-ou", default=False, action="store_true")
     parser.add_argument("--comment", default='', type=str)
+    parser.add_argument("--n-controlled", default=1, type=int)
     args = parser.parse_args()
     train(args)
