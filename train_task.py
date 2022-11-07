@@ -130,7 +130,6 @@ def train(args) -> None:
 
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, dones, infos = task.step(actions_buf)
-        task.render()
 
         if global_step % 30000 == 0:
             record_flag = 1

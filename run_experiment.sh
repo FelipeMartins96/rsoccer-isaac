@@ -1,1 +1,1 @@
-python train_task_selfplay.py --comment "selfplay-3v3";
+python train_task.py --record --comment "refactored-1-vs-stopped"
