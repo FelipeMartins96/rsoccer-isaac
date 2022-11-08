@@ -54,35 +54,40 @@ def get_cfg():
     return cfg
 
 
-class VSS3v3(VecTask):
-    def __init__(self, has_grad=True, has_energy=True, has_move=True):
+class VSS3v3SelfPlay(VecTask):
+    def __init__(self, has_grad=True, record=False):
         self.cfg = get_cfg()
         self.max_episode_length = 400
 
-        self.n_blue_robots = 3
-        self.n_controlled_robots = 1
-        assert self.n_controlled_robots <= self.n_blue_robots
-        self.n_yellow_robots = 3
-        self.n_robots = self.n_blue_robots + self.n_yellow_robots
+        self.n_robots_per_team = 3
+        self.n_robot_dofs = 2
+
+        # FIXED VALUES
+        self.n_teams = 2
         self.n_balls = 1  # does not support more
+
+        self.n_robots = self.n_robots_per_team * self.n_teams
+
         self.env_total_width = 2
         self.env_total_height = 1.5
-        self.robot_max_wheel_rad_s = 100.0
+        self.robot_max_wheel_rad_s = 50.0
         self.field_width = 1.5
         self.field_height = 1.3
         self.goal_height = 0.4
+        self.min_dist = 0.07
 
         self.w_goal = 5
         self.w_grad = 2 if has_grad else 0
-        self.w_energy = 1 / 2000 if has_energy else 0
-        self.w_move = 1 if has_move else 0
 
-        self.n_robot_dofs = 2
-        self.n_allies_actions = self.n_blue_robots * self.n_robot_dofs
-        self.cfg['env']['numActions'] = 2 * self.n_controlled_robots
+        self.n_agents = self.n_teams
+        self.n_team_actions = self.n_robots_per_team * self.n_robot_dofs
+        self.cfg['env']['numAgents'] = self.n_agents
+        self.cfg['env']['numActions'] = self.n_team_actions * self.n_teams
         self.cfg['env']['numObservations'] = (
-            4 + (self.n_blue_robots + self.n_yellow_robots) * 7 + self.n_allies_actions
+            4 + (self.n_robots) * 7 + self.n_team_actions
         )
+
+        self.cfg['virtual_screen_capture'] = record
 
         super().__init__(
             config=self.cfg,
@@ -98,7 +103,6 @@ class VSS3v3(VecTask):
         self.combinations = torch.tensor(
             list(combinations(entities_ids, 2)), device=self.device
         )
-        self.min_dist = 0.07
 
         self._acquire_tensors()
         self._refresh_tensors()
@@ -106,8 +110,8 @@ class VSS3v3(VecTask):
         self.compute_observations()
 
         if self.viewer != None:
-            cam_pos = gymapi.Vec3(0.0, -0.2, 4)
-            cam_target = gymapi.Vec3(0.0, 0.0, 0.0)
+            cam_pos = gymapi.Vec3(2, 0.0, 5)
+            cam_target = gymapi.Vec3(2, 1.0, 0.0)
             self.gym.viewer_camera_look_at(self.viewer, None, cam_pos, cam_target)
 
     def create_sim(self):
@@ -131,10 +135,13 @@ class VSS3v3(VecTask):
             )
 
             self._add_ball(_env, i)
-            for j in range(self.n_blue_robots):
+            # Blue Robots
+            for j in range(self.n_robots_per_team):
                 self._add_robot(_env, i, 0, j)
-            for j in range(self.n_yellow_robots):
+            # Yellow Robots
+            for j in range(self.n_robots_per_team):
                 self._add_robot(_env, i, 1, j)
+
             self._add_field(_env, i)
 
     def pre_physics_step(self, _actions):
@@ -142,7 +149,7 @@ class VSS3v3(VecTask):
         env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
         self.progress_buf[env_ids] = 0
 
-        self.dof_velocity_buf[..., : self.num_actions] = _actions.to(self.device)
+        self.dof_velocity_buf[:] = _actions.to(self.device)
 
         act = self.dof_velocity_buf * self.robot_max_wheel_rad_s
         self.gym.set_dof_velocity_target_tensor(self.sim, gymtorch.unwrap_tensor(act))
@@ -158,8 +165,6 @@ class VSS3v3(VecTask):
         self.extras["terminal_rewards"] = {
             "goal": self.rw_goal.clone().to(self.rl_device),
             "grad": self.rw_grad.clone().to(self.rl_device),
-            "energy": self.rw_energy.clone().to(self.rl_device),
-            "move": self.rw_move.clone().to(self.rl_device),
         }
         self.extras["progress_buffer"] = (
             self.progress_buf.clone().to(self.rl_device).float()
@@ -169,22 +174,18 @@ class VSS3v3(VecTask):
         self.compute_observations()
 
     def compute_rewards_and_dones(self):
-        # goal, grad, energy, move
-        _, p_grad, _, p_move = compute_vss_rewards(
+        # goal, grad
+        _, p_grad = compute_vss_rewards(
             self.ball_pos,
-            self.robots_pos[:, 0, :],
-            self.dof_velocity_buf,
-            self.rew_buf,
+            self.rew_buf[:, 0],
             self.yellow_goal,
             self.field_width,
             self.goal_height,
         )
         self._refresh_tensors()
-        goal, grad, energy, move = compute_vss_rewards(
+        goal, grad = compute_vss_rewards(
             self.ball_pos,
-            self.robots_pos[:, 0, :],
-            self.dof_velocity_buf,
-            self.rew_buf,
+            self.rew_buf[:, 0],
             self.yellow_goal,
             self.field_width,
             self.goal_height,
@@ -192,15 +193,13 @@ class VSS3v3(VecTask):
 
         goal_rw = self.w_goal * goal
         grad_rw = self.w_grad * (grad - p_grad)
-        energy_rw = self.w_energy * energy
-        move_rw = self.w_move * (move - p_move)
 
         self.rw_goal += goal_rw
         self.rw_grad += grad_rw
-        self.rw_energy += energy_rw
-        self.rw_move += move_rw
 
-        self.rew_buf = goal_rw + grad_rw + energy_rw + move_rw
+        rw_sum = (goal_rw + grad_rw).view(-1, 1)
+
+        self.rew_buf[:] = torch.cat((rw_sum, -rw_sum), dim=1)
 
         self.reset_buf = compute_vss_dones(
             ball_pos=self.ball_pos,
@@ -212,9 +211,9 @@ class VSS3v3(VecTask):
         )
 
     def compute_observations(self):
-        self.obs_buf[..., :2] = self.ball_pos
-        self.obs_buf[..., 2:4] = self.ball_vel
-        self.obs_buf[..., 4 : -self.n_allies_actions] = compute_robots_obs(
+        self.obs_buf[:, 0, :2] = self.ball_pos
+        self.obs_buf[:, 0, 2:4] = self.ball_vel
+        self.obs_buf[:, 0, 4 : -self.n_team_actions] = compute_robots_obs(
             self.robots_pos,
             self.robots_vel,
             self.robots_quats,
@@ -222,8 +221,29 @@ class VSS3v3(VecTask):
             self.n_robots,
             self.num_envs,
         )
-        self.obs_buf[..., -self.n_allies_actions :] = self.dof_velocity_buf[
-            ..., : self.n_allies_actions
+        self.obs_buf[:, 0, -self.n_team_actions :] = self.dof_velocity_buf[
+            ..., : self.n_team_actions
+        ]
+
+        # getting yellow obs by mirroring blue obs
+        self.obs_buf[:, 1, :4] = -self.obs_buf[:, 0, :4]
+        mirror_obs = (
+            self.obs_buf[:, 0, 4 : -self.n_team_actions].view(
+                self.num_envs, self.n_robots, -1
+            )
+            * self.mirror_tensor
+        )
+        yellow_obs = self.obs_buf[:, 1, 4 : -self.n_team_actions].view(
+            self.num_envs, self.n_robots, -1
+        )
+        yellow_obs[:, : self.n_robots_per_team, :] = mirror_obs[
+            :, self.n_robots_per_team :, :
+        ]
+        yellow_obs[:, self.n_robots_per_team :, :] = mirror_obs[
+            :, : self.n_robots_per_team, :
+        ]
+        self.obs_buf[:, 1, -self.n_team_actions :] = self.dof_velocity_buf[
+            ..., -self.n_team_actions :
         ]
 
     def reset_dones(self):
@@ -279,15 +299,54 @@ class VSS3v3(VecTask):
             )
             self.robots_quats[env_ids] = quat_from_angle_axis(rand_angles, self.z_axis)
 
+            # randomize ball velocities
+            rand_ball_vel = (
+                torch.rand(
+                    (len(env_ids), 2),
+                    dtype=torch.float,
+                    device=self.device,
+                    requires_grad=False,
+                )
+                - 0.5
+            ) * 2
+            self.ball_vel[env_ids] = rand_ball_vel
+
             self.gym.set_actor_root_state_tensor(
                 self.sim, gymtorch.unwrap_tensor(self.root_state)
             )
 
             self.rw_goal[env_ids] = 0.0
             self.rw_grad[env_ids] = 0.0
-            self.rw_energy[env_ids] = 0.0
-            self.rw_move[env_ids] = 0.0
             self.dof_velocity_buf[env_ids] *= 0.0
+
+    def allocate_buffers(self):
+        # allocate buffers
+        self.obs_buf = torch.zeros(
+            (self.num_envs, self.num_agents, self.num_obs),
+            device=self.device,
+            dtype=torch.float,
+        )
+        self.states_buf = torch.zeros(
+            (self.num_envs, self.num_agents, self.num_states),
+            device=self.device,
+            dtype=torch.float,
+        )
+        self.rew_buf = torch.zeros(
+            (self.num_envs, self.num_agents),
+            device=self.device,
+            dtype=torch.float,
+        )
+        self.reset_buf = torch.ones(self.num_envs, device=self.device, dtype=torch.long)
+        self.timeout_buf = torch.zeros(
+            self.num_envs, device=self.device, dtype=torch.long
+        )
+        self.progress_buf = torch.zeros(
+            self.num_envs, device=self.device, dtype=torch.long
+        )
+        self.randomize_buf = torch.zeros(
+            self.num_envs, device=self.device, dtype=torch.long
+        )
+        self.extras = {}
 
     def _add_ground(self):
         pp = gymapi.PlaneParams()
@@ -457,12 +516,10 @@ class VSS3v3(VecTask):
             - self.min_dist
         )
 
-        n_balls = 1
-        n_robots = self.n_blue_robots + self.n_yellow_robots
         n_field_actors = 8  # 2 side walls, 4 end walls, 2 goal walls
-        self.num_actors = n_balls + n_robots + n_field_actors
+        self.num_actors = self.n_balls + self.n_robots + n_field_actors
         self.ball = 0
-        self.robots = slice(n_balls, n_balls + n_robots)
+        self.robots = slice(self.n_balls, self.n_balls + self.n_robots)
 
         _root_state = self.gym.acquire_actor_root_state_tensor(self.sim)
 
@@ -497,19 +554,19 @@ class VSS3v3(VecTask):
         )
 
         self.rw_goal = torch.zeros_like(
-            self.rew_buf, device=self.device, requires_grad=False
+            self.rew_buf[:, 0], device=self.device, requires_grad=False
         )
         self.rw_grad = torch.zeros_like(
-            self.rew_buf, device=self.device, requires_grad=False
-        )
-        self.rw_energy = torch.zeros_like(
-            self.rew_buf, device=self.device, requires_grad=False
-        )
-        self.rw_move = torch.zeros_like(
-            self.rew_buf, device=self.device, requires_grad=False
+            self.rew_buf[:, 0], device=self.device, requires_grad=False
         )
         self.dof_velocity_buf = torch.zeros(
             (self.num_envs, self.n_robots * 2), device=self.device, requires_grad=False
+        )
+        self.mirror_tensor = torch.tensor(
+            [-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, 1.0],
+            dtype=torch.float,
+            device=self.device,
+            requires_grad=False,
         )
 
     def _refresh_tensors(self):
@@ -522,10 +579,8 @@ class VSS3v3(VecTask):
 
 
 @torch.jit.script
-def compute_vss_rewards(
-    ball_pos, robot_pos, actions, rew_buf, yellow_goal, field_width, goal_height
-):
-    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, float, float) -> Tuple[Tensor, Tensor, Tensor, Tensor]
+def compute_vss_rewards(ball_pos, rew_buf, yellow_goal, field_width, goal_height):
+    # type: (Tensor, Tensor, Tensor, float, float) -> Tuple[Tensor, Tensor]
     # Negative what we want to reduce, Positive what we want to increase
 
     zeros = torch.zeros_like(rew_buf)
@@ -540,19 +595,13 @@ def compute_vss_rewards(
     goal = torch.where(is_goal_blue, ones, zeros)
     goal = torch.where(is_goal_yellow, -ones, goal)
 
-    # MOVE
-    move = -torch.norm(robot_pos[:, :] - ball_pos, dim=1)
-
     # GRAD
     dist_ball_left_goal = torch.norm(ball_pos - (-yellow_goal), dim=1)
     dist_ball_right_goal = torch.norm(ball_pos - yellow_goal, dim=1)
     grad = dist_ball_left_goal - dist_ball_right_goal
 
-    # ENERGY
-    energy = -torch.sum(torch.abs(actions), dim=1)
-
-    # goal, grad, energy, move
-    return goal, grad, energy, move
+    # goal, grad
+    return goal, grad
 
 
 @torch.jit.script
