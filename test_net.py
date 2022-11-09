@@ -23,36 +23,61 @@ class Actor(nn.Module):
         return x
 
 
+def random_ou(prev):
+    ou_theta = 0.1
+    ou_sigma = 0.15
+    noise = (
+        prev
+        - ou_theta * prev
+        + torch.normal(
+            0.0,
+            ou_sigma,
+            size=prev.size(),
+            device=prev.device,
+            requires_grad=False,
+        )
+    )
+    return noise.clamp(-1.0, 1.0)
+
+
 class Runner:
     def __init__(self, task):
 
         self.task = task
         self.net_1 = Actor(task, 1).to(task.rl_device)
-        self.net_3 = Actor(task, 3).to(task.rl_device)
-        self.net_3_alt = Actor(task, 3).to(task.rl_device)
-        self.net_1.load_state_dict(torch.load('actor1controlled-stopped-onlygoal.pth'))
-        self.net_3.load_state_dict(torch.load('actor3controlled-stopped-onlygoal.pth'))
-        self.net_3_alt.load_state_dict(
-            torch.load('actor3controlled-stopped-onlygoal-23-11-23-28.pth')
+        # self.net_3 = Actor(task, 3).to(task.rl_device)
+        # self.net_3_alt = Actor(task, 3).to(task.rl_device)
+        self.net_1.load_state_dict(
+            torch.load(
+                '/home/fbm2/isaac/rsoccer-isaac/runs/Nov08_14-55-14_SARCO-021-vs-ou/actor1-vs-ou.pth'
+            )
         )
-        self.zero_action = torch.cat((task.zero_actions(), task.zero_actions()), dim=1)
+        # self.net_3.load_state_dict(torch.load('actor3controlled-stopped-onlygoal.pth'))
+        # self.net_3_alt.load_state_dict(
+        # torch.load('actor3controlled-stopped-onlygoal-23-11-23-28.pth')
+        # )
+        self.zero_action = task.zero_actions()
+        self.noise = task.zero_actions()
 
     def get_actions(self, obs):
         with torch.no_grad():
-            acts_b = self.net_3_alt(obs['obs'][:, 0, :])
-            acts_y = self.net_1(obs['obs'][:, 1, :])
+            # acts_b = self.net_3_alt(obs['obs'][:, 0, :])
+            acts_b = self.net_1(obs['obs'][:, 0, :])
             # acts_y = self.net_1(obs['obs'][:, 0, :])
 
-            action = self.zero_action.clone().reshape(
-                self.task.num_envs, self.task.num_agents, -1
-            )
-            action[:, 0, 0:6] = acts_b
+            self.noise = random_ou(self.noise)
+            # action = self.zero_action.clone()
+            action = self.noise.clone()
+            # .reshape(
+            #     self.task.num_envs, self.task.num_agents, -1
+            # )
+            action[:, 0:2] = acts_b
             # action[:, 1, 0:2] = acts_y
-        return action.reshape(self.task.num_envs, -1).clone()
+        return action
 
 
 def main():
-    task = VSS3v3SelfPlay()
+    task = VSS3v3SelfPlay(record=True)
     runner = Runner(task)
 
     obs = task.reset()
@@ -61,17 +86,20 @@ def main():
     len_sum = 0
     frames = []
     # while not task.gym.query_viewer_has_closed(task.viewer):
-    while ep_count < 5000:
+    # while ep_count < 5000:
+    for i in range(1000):
+        print(i)
         obs, rew, dones, info = task.step(runner.get_actions(obs))
-        # frames.append(task.render())
+        # task.render()
+        frames.append(task.render())
         env_ids = dones.nonzero(as_tuple=False).squeeze(-1)
         if len(env_ids):
             ep_count += len(env_ids)
             rw_sum += rew[env_ids, 0].sum().item()
             len_sum += info['progress_buffer'][env_ids].sum().item()
             # print(ep_count)
-    # clip = ImageSequenceClip(frames, fps=20)
-    # clip.write_videofile('video.mp4')
+    clip = ImageSequenceClip(frames, fps=20)
+    clip.write_videofile('video.mp4')
     print()
     print(f'avg reward: {rw_sum / ep_count}')
     print(f'avg length: {len_sum / ep_count}')
