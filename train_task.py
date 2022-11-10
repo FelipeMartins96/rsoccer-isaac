@@ -58,7 +58,7 @@ def train(args) -> None:
     writer = SummaryWriter(comment=args.comment)
     device = task.cfg['rl_device']
     lr = 3e-4
-    total_timesteps = 600000
+    total_timesteps = 2000000
     learning_starts = 25e4
     batch_size = 4096
     gamma = 0.99

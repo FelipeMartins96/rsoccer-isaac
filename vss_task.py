@@ -70,7 +70,7 @@ class VSS3v3SelfPlay(VecTask):
 
         self.env_total_width = 2
         self.env_total_height = 1.5
-        self.robot_max_wheel_rad_s = 50.0
+        self.robot_max_wheel_rad_s = 60.0
         self.field_width = 1.5
         self.field_height = 1.3
         self.goal_height = 0.4
