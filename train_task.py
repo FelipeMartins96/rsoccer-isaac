@@ -52,6 +52,39 @@ class Actor(nn.Module):
         return x
 
 
+BALL_O = list(range(4))
+B0_O = list(range(4, 11))
+B1_O = list(range(11, 18))
+B2_O = list(range(18, 25))
+Y_O = list(range(25, 46))
+BA0_O = list(range(46, 48))
+BA1_O = list(range(48, 50))
+BA2_O = list(range(50, 52))
+BA0_A = list(range(2))
+BA1_A = list(range(2, 4))
+BA2_A = list(range(4, 6))
+PERMS_IDS_O = [
+    BALL_O + B0_O + B1_O + B2_O + Y_O + BA0_O + BA1_O + BA2_O,
+    BALL_O + B1_O + B0_O + B2_O + Y_O + BA1_O + BA0_O + BA2_O,
+    BALL_O + B1_O + B2_O + B0_O + Y_O + BA1_O + BA2_O + BA0_O,
+]
+PERMS_IDS_A = [
+    BA0_A + BA1_A + BA2_A,
+    BA1_A + BA0_A + BA2_A,
+    BA1_A + BA2_A + BA0_A,
+]
+
+
+def get_permutations(obs, n_obs, acts, rewards, dones):
+    return {
+        'observations': torch.cat([obs[:, p] for p in PERMS_IDS_O]),
+        'next_observations': torch.cat([n_obs[:, p] for p in PERMS_IDS_O]),
+        'actions': torch.cat([acts[:, p] for p in PERMS_IDS_A]),
+        'rewards': torch.cat([rewards for _ in range(len(PERMS_IDS_A))]),
+        'dones': torch.cat([dones for _ in range(len(PERMS_IDS_A))]),
+    }
+
+
 def train(args) -> None:
     task = VSS3v3SelfPlay(has_grad=args.grad, record=args.record)
 
@@ -59,11 +92,11 @@ def train(args) -> None:
     device = task.cfg['rl_device']
     lr = 3e-4
     total_timesteps = 2000000
-    learning_starts = 25e4
+    learning_starts = 1e6
     batch_size = 4096
     gamma = 0.99
     tau = 0.005
-    rb_size = 4000000
+    rb_size = 10000000
 
     n_controlled_robots = args.n_controlled
     assert n_controlled_robots <= 3
@@ -71,13 +104,14 @@ def train(args) -> None:
     self_play = args.selfplay
 
     actor = Actor(task, n_actions).to(device=device)
+    actor.load_state_dict(torch.load('/home/fbm2/isaac/rsoccer-isaac/actor3-vs-ou.pth'))
     qf1 = QNetwork(task, n_actions).to(device=device)
     qf1_target = QNetwork(task, n_actions).to(device=device)
     target_actor = Actor(task, n_actions).to(device=device)
     target_actor.load_state_dict(actor.state_dict())
     qf1_target.load_state_dict(qf1.state_dict())
     q_optimizer = optim.Adam(list(qf1.parameters()), lr=lr)
-    actor_optimizer = optim.Adam(list(actor.parameters()), lr=lr)
+    actor_optimizer = optim.Adam(list(actor.parameters()), lr=lr/4)
 
     rb = ReplayBuffer(rb_size, device)
     start_time = time.time()
@@ -115,7 +149,7 @@ def train(args) -> None:
         with torch.no_grad():
             exp_noise = random_ou(exp_noise)
             env_noise = random_ou(env_noise)
-            if rb.get_total_count() < learning_starts:
+            if False:  # rb.get_total_count() < learning_starts:
                 actions = exp_noise
             else:
                 if self_play:
@@ -150,13 +184,14 @@ def train(args) -> None:
                 clip.write_videofile(f'{writer.get_logdir()}/video-{global_step}.mp4')
                 frames = []
                 record_flag = 0
-
-        writer.add_scalar(
-            "charts/mean_action_m1", actions[:, 0, 0].mean().item(), global_step
-        )
-        writer.add_scalar(
-            "charts/mean_action_m2", actions[:, 0, 1].mean().item(), global_step
-        )
+        
+        if global_step % 100 == 0:
+            writer.add_scalar(
+                "charts/mean_action_m1", actions[:, 0, 0].mean().item(), global_step
+            )
+            writer.add_scalar(
+                "charts/mean_action_m2", actions[:, 0, 1].mean().item(), global_step
+            )
 
         # # TRY NOT TO MODIFY: record rewards for plotting purposes
         real_next_obs = next_obs['obs'].clone()
@@ -183,31 +218,41 @@ def train(args) -> None:
             env_noise[env_ids] *= 0.0
 
         # TRY NOT TO MODIFY: save data to replay buffer;
+
         rb.store(
-            {
-                'observations': obs['obs'][:, 0],
-                'next_observations': real_next_obs[:, 0],
-                'actions': actions[:, 0],
-                'rewards': rewards[:, 0],
-                'dones': dones,
-            }
-        )
-        if self_play:
-            rb.store(
-                {
-                    'observations': obs['obs'][:, 1],
-                    'next_observations': real_next_obs[:, 1],
-                    'actions': actions[:, 1],
-                    'rewards': rewards[:, 1],
-                    'dones': dones,
-                }
+            get_permutations(
+                obs['obs'][:, 0],
+                real_next_obs[:, 0],
+                actions[:, 0],
+                rewards[:, 0],
+                dones,
             )
+        )
+        # rb.store(
+        #     {
+        #         'observations': obs['obs'][:, 0],
+        #         'next_observations': real_next_obs[:, 0],
+        #         'actions': actions[:, 0],
+        #         'rewards': rewards[:, 0],
+        #         'dones': dones,
+        #     }
+        # )
+        # if self_play:
+        #     rb.store(
+        #         {
+        #             'observations': obs['obs'][:, 1],
+        #             'next_observations': real_next_obs[:, 1],
+        #             'actions': actions[:, 1],
+        #             'rewards': rewards[:, 1],
+        #             'dones': dones,
+        #         }
+        #     )
 
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
         obs = deepcopy(next_obs)
 
         # ALGO LOGIC: training.
-        if rb.get_total_count() > learning_starts:
+        if rb.get_total_count() > rb_size:
             data = rb.sample(batch_size)
             with torch.no_grad():
                 next_state_actions = target_actor(data['next_observations'])
@@ -226,10 +271,13 @@ def train(args) -> None:
             qf1_loss.backward()
             q_optimizer.step()
 
-            actor_loss = -qf1(data['observations'], actor(data['observations'])).mean()
-            actor_optimizer.zero_grad()
-            actor_loss.backward()
-            actor_optimizer.step()
+            if global_step > 30000:
+                actor_loss = -qf1(
+                    data['observations'], actor(data['observations'])
+                ).mean()
+                actor_optimizer.zero_grad()
+                actor_loss.backward()
+                actor_optimizer.step()
 
             # update the target network
             for param, target_param in zip(
@@ -245,7 +293,8 @@ def train(args) -> None:
 
             if global_step % 100 == 0:
                 writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
-                writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
+                if global_step > 30000:
+                    writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
                 writer.add_scalar(
                     "losses/qf1_values", qf1_a_values.mean().item(), global_step
                 )
