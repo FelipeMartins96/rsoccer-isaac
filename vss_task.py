@@ -26,8 +26,8 @@ def get_cfg():
         'rl_device': 'cuda:0',
         'sim_device': 'cuda:0',
         'graphics_device_id': 0,
-        'headless': False,
-        'virtual_screen_capture': True,
+        'headless': True,
+        'virtual_screen_capture': False,
         'force_render': False,
         'physics_engine': 'physx',
     }

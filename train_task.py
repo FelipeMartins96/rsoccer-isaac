@@ -104,7 +104,7 @@ def train(args) -> None:
     self_play = args.selfplay
 
     actor = Actor(task, n_actions).to(device=device)
-    actor.load_state_dict(torch.load('/home/fbm2/isaac/rsoccer-isaac/actor3-vs-ou.pth'))
+    # actor.load_state_dict(torch.load('/home/fbm2/isaac/rsoccer-isaac/actor3-vs-ou.pth'))
     qf1 = QNetwork(task, n_actions).to(device=device)
     qf1_target = QNetwork(task, n_actions).to(device=device)
     target_actor = Actor(task, n_actions).to(device=device)
@@ -149,7 +149,7 @@ def train(args) -> None:
         with torch.no_grad():
             exp_noise = random_ou(exp_noise)
             env_noise = random_ou(env_noise)
-            if False:  # rb.get_total_count() < learning_starts:
+            if rb.get_total_count() < learning_starts:
                 actions = exp_noise
             else:
                 if self_play:
