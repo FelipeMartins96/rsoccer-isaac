@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import numpy as np
 from vss_task import VSS3v3SelfPlay
 from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
-
+import hydra
 
 class Actor(nn.Module):
     def __init__(self, env, n_controlled_robots):
@@ -76,33 +76,50 @@ class Runner:
         return action
 
 
-def main():
-    task = VSS3v3SelfPlay(record=True)
-    runner = Runner(task)
+from rl_games import torch_runner
+from isaacgymenvs.utils.reformat import omegaconf_to_dict, print_dict
+import gym
+@hydra.main(config_name="VSSPPO", config_path="./cfg")
+def main(cfg):
+    cfg = omegaconf_to_dict(cfg)
+    cfg['params']['config']['env_info'] = {
+        'observation_space': gym.spaces.Box(low=-np.inf, high=np.inf, shape=(52,), dtype=np.float32),
+        'action_space': gym.spaces.Box(low=-1.0, high=1.0, shape=(6,), dtype=np.float32),
+        'agents': 1,
+        'value_size': 1
+    }
+    runner = torch_runner.Runner()
+    runner.load(cfg)
+    print_dict(runner.params)
+    player = runner.create_player()
+    player.restore()
+    import pdb; pdb.set_trace()
+    # task = VSS3v3SelfPlay(record=True)
+    # runner = Runner(task)
 
-    obs = task.reset()
-    ep_count = 0
-    rw_sum = 0
-    len_sum = 0
-    frames = []
-    # while not task.gym.query_viewer_has_closed(task.viewer):
-    # while ep_count < 5000:
-    for i in range(1000):
-        print(i)
-        obs, rew, dones, info = task.step(runner.get_actions(obs))
-        # task.render()
-        frames.append(task.render())
-        env_ids = dones.nonzero(as_tuple=False).squeeze(-1)
-        if len(env_ids):
-            ep_count += len(env_ids)
-            rw_sum += rew[env_ids, 0].sum().item()
-            len_sum += info['progress_buffer'][env_ids].sum().item()
-            # print(ep_count)
-    clip = ImageSequenceClip(frames, fps=20)
-    clip.write_videofile('video.mp4')
-    print()
-    print(f'avg reward: {rw_sum / ep_count}')
-    print(f'avg length: {len_sum / ep_count}')
+    # obs = task.reset()
+    # ep_count = 0
+    # rw_sum = 0
+    # len_sum = 0
+    # frames = []
+    # # while not task.gym.query_viewer_has_closed(task.viewer):
+    # # while ep_count < 5000:
+    # for i in range(1000):
+    #     print(i)
+    #     obs, rew, dones, info = task.step(runner.get_actions(obs))
+    #     # task.render()
+    #     frames.append(task.render())
+    #     env_ids = dones.nonzero(as_tuple=False).squeeze(-1)
+    #     if len(env_ids):
+    #         ep_count += len(env_ids)
+    #         rw_sum += rew[env_ids, 0].sum().item()
+    #         len_sum += info['progress_buffer'][env_ids].sum().item()
+    #         # print(ep_count)
+    # clip = ImageSequenceClip(frames, fps=20)
+    # clip.write_videofile('video.mp4')
+    # print()
+    # print(f'avg reward: {rw_sum / ep_count}')
+    # print(f'avg length: {len_sum / ep_count}')
 
 
 if __name__ == '__main__':
