@@ -1,5 +1,5 @@
 params:
-  seed: 0
+  seed: ${...seed}
 
   algo:
     name: a2c_continuous
@@ -30,19 +30,16 @@ params:
       regularizer:
         name: None
 
-  load_checkpoint: False # flag which sets whether to load the checkpoint
-  load_path: '' # path to the checkpoint to load
-
   config:
-    name: 'VSS'
-    device: 'cuda:0'
+    name: ${....experiment}
+    device: ${....device}
     full_experiment_name: ${.name}
     env_name: rlgpu
     ppo: True
     mixed_precision: False
     normalize_input: True
     normalize_value: True
-    num_actors: 16
+    num_actors: ${....num_envs}
     reward_shaper:
       scale_value: 1000
     normalize_advantage: True
@@ -60,7 +57,7 @@ params:
     truncate_grads: True
     e_clip: 0.2
     horizon_length: 256
-    minibatch_size: 32768
+    minibatch_size: 32760
     mini_epochs: 8
     critic_coef: 4
     clip_value: False

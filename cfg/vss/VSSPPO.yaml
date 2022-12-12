@@ -30,19 +30,16 @@ params:
       regularizer:
         name: None
 
-  load_checkpoint: ${if:${...checkpoint},True,False} # flag which sets whether to load the checkpoint
-  load_path: ${...checkpoint} # path to the checkpoint to load
-
   config:
-    name: ${resolve_default:VSSDMA,${....experiment}}
-    device: ${....device}
+    name: ${....experiment}
+    device: 'cuda:0'
     full_experiment_name: ${.name}
     env_name: rlgpu
     ppo: True
     mixed_precision: False
     normalize_input: True
     normalize_value: True
-    num_actors: ${....task.env.numEnvs}
+    num_actors: ${....num_envs}
     reward_shaper:
       scale_value: 1000
     normalize_advantage: True
@@ -52,7 +49,7 @@ params:
     lr_schedule: None
     kl_threshold: 0.008
     score_to_win: 100
-    max_epochs: ${resolve_default:1000,${....max_iterations}}
+    max_epochs: 1000
     save_best_after: 25
     save_frequency: 25
     grad_norm: 1.5
@@ -60,8 +57,13 @@ params:
     truncate_grads: True
     e_clip: 0.2
     horizon_length: 256
-    minibatch_size: 32760
+    minibatch_size: 32768
     mini_epochs: 8
     critic_coef: 4
     clip_value: False
     bounds_loss_coef: 0.0001
+    env_info:
+      value_size: 1
+      observation_space: 1
+      action_space: 16
+      agents: 1

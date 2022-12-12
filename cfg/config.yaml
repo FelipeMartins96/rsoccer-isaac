@@ -1,0 +1,9 @@
+experiment: 'test_net'
+device: 'cuda:0'
+num_envs: 16
+seed: 42
+num_eps: 1000
+
+defaults:
+  - vss: VSSPPO
+  - vssdma: VSSDecentralizedMAPPO

@@ -26,7 +26,7 @@ def get_cfg():
         'rl_device': 'cuda:0',
         'sim_device': 'cuda:0',
         'graphics_device_id': 0,
-        'headless': True,
+        'headless': False,
         'virtual_screen_capture': True,
         'force_render': False,
         'physics_engine': 'physx',
@@ -55,8 +55,9 @@ def get_cfg():
 
 
 class VSS3v3SelfPlay(VecTask):
-    def __init__(self, has_grad=True, record=False):
+    def __init__(self, has_grad=True, record=False, num_envs=2048):
         self.cfg = get_cfg()
+        self.cfg['env']['numEnvs'] = num_envs
         self.max_episode_length = 400
 
         self.n_robots_per_team = 3
