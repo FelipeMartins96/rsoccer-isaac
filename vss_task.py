@@ -28,7 +28,7 @@ def get_cfg():
         'graphics_device_id': 0,
         'headless': False,
         'virtual_screen_capture': True,
-        'force_render': False,
+        'force_render': True,
         'physics_engine': 'physx',
     }
 
@@ -58,6 +58,15 @@ class VSS3v3SelfPlay(VecTask):
     def __init__(self, has_grad=True, record=False, num_envs=2048):
         self.cfg = get_cfg()
         self.cfg['env']['numEnvs'] = num_envs
+        if record:
+            self.cfg['virtual_screen_capture'] = True
+            self.cfg['force_render'] = False
+            self.cfg['headless'] = False
+        else:
+            self.cfg['virtual_screen_capture'] = False
+            self.cfg['force_render'] = True
+            self.cfg['headless'] = False
+
         self.max_episode_length = 400
 
         self.n_robots_per_team = 3
@@ -71,13 +80,13 @@ class VSS3v3SelfPlay(VecTask):
 
         self.env_total_width = 2
         self.env_total_height = 1.5
-        self.robot_max_wheel_rad_s = 60.0
+        self.robot_max_wheel_rad_s = 42.0
         self.field_width = 1.5
         self.field_height = 1.3
         self.goal_height = 0.4
         self.min_dist = 0.07
 
-        self.w_goal = 5
+        self.w_goal = 1
         self.w_grad = 2 if has_grad else 0
 
         self.n_agents = self.n_teams

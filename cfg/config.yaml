@@ -3,6 +3,7 @@ device: 'cuda:0'
 num_envs: 16
 seed: 42
 num_eps: 1000
+record: False
 
 defaults:
   - vss: VSSPPO

@@ -6,7 +6,10 @@ import numpy as np
 from vss_task import VSS3v3SelfPlay
 from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
 import hydra
-
+from rl_games import torch_runner
+from isaacgymenvs.utils.reformat import omegaconf_to_dict, print_dict
+import gym
+from functools import partial
 
 def random_ou(prev):
     ou_theta = 0.1
@@ -60,9 +63,7 @@ class Runner:
             # action[:, 1, 0:2] = acts_y
         return action
 
-from rl_games import torch_runner
-from isaacgymenvs.utils.reformat import omegaconf_to_dict, print_dict
-import gym
+
 
 def get_vss_player(cfg, ckpt):
     cfg = omegaconf_to_dict(cfg)
@@ -109,40 +110,87 @@ def get_vssdma_player(cfg, ckpt):
     player.restore(ckpt)
     return player
 
+# get actions
+
+def get_obs_with_perms(obs):
+    _obs = obs.repeat_interleave(3, dim=0)
+    permutations = [[0, 1, 2], [1, 2, 0], [2, 0, 1]]
+    permutations = torch.tensor(permutations, device=obs.device)
+    _obs[:, 4:25] = obs[:, 4:25].view(-1, 3, 7)[:, permutations].view(-1, 21)
+    _obs[:, -6:] = obs[:, -6:].view(-1, 3, 2)[:, permutations].view(-1, 6)
+    return _obs
+
+def _get_vss1_actions(obs, actions, player):
+    player.has_batch_dimension = True
+    _action = player.get_action(obs, is_determenistic=True)
+    actions[:, :2] = _action
+    return actions
+
+def _get_dma_actions(obs, actions, player):
+    player.has_batch_dimension = True
+    _obs = get_obs_with_perms(obs)
+    _action = player.get_action(_obs, is_determenistic=True)
+    actions[:, :6] = _action.view(-1, 6)
+    return actions
+
+def _get_cma_actions(obs, actions, player):
+    player.has_batch_dimension = True
+    _actions = player.get_action(obs, is_determenistic=True)
+    actions[:, :6] = _actions
+    return actions
 
 @hydra.main(config_name="config", config_path="./cfg")
 def main(cfg):
-    task = VSS3v3SelfPlay(record=False, num_envs=cfg.num_envs)
+    task = VSS3v3SelfPlay(record=False, num_envs=cfg.num_envs, has_grad=False)
     
-    # TODO: create players (vss, vsscma, vssdma)
-    # TODO: for each permutation of [vss, vsscma, vssdma] adapt get_actions
+    p_vss = get_vss_player(cfg.vss, '/home/fbm2/isaac/rsoccer-isaac/ppo-0.pth')
+    p_cma = get_vsscma_player(cfg.vss, '/home/fbm2/isaac/rsoccer-isaac/ppo-CMA-1.pth')
+    p_dma = get_vssdma_player(cfg.vssdma, '/home/fbm2/isaac/rsoccer-isaac/ppo-DMA.pth')
+
+    get_vss1_actions = partial(_get_vss1_actions, player=p_vss)
+    get_vss3_actions = partial(_get_dma_actions, player=p_vss)
+    get_cma_actions = partial(_get_cma_actions, player=p_cma)
+    get_dma_actions = partial(_get_dma_actions, player=p_dma)
+
     # TODO: Generate gif for each case and run statistics
     
-    def get_actions(obs):
-        za = task.zero_actions()
-        return za
+    get_blue_actions = get_cma_actions
+    get_yellow_actions = get_dma_actions
 
     obs = task.reset()
     ep_count = 0
     rw_sum = 0
     len_sum = 0
     frames = []
-    # while not task.gym.query_viewer_has_closed(task.viewer):
-    # while ep_count < 5000:
-    for i in range(cfg.num_eps):
-        print(i)
-        obs, rew, dones, info = task.step(get_actions(obs))
-        # task.render()
-        # frames.append(task.render())
+    actions = task.zero_actions()
+    while ep_count < cfg.num_eps:
+        
+        actions = random_ou(actions)
+
+        # Get actions blue
+        blue_actions = actions.view(-1, 2, 6)[:, 0, :]
+        blue_actions = get_blue_actions(obs['obs'][:, 0, :], blue_actions)
+        # Get actions yellow
+        yellow_actions = actions.view(-1, 2, 6)[:, 1, :]
+        yellow_actions = get_yellow_actions(obs['obs'][:, 1, :], yellow_actions)
+
+        obs, rew, dones, info = task.step(actions)
+        
+        frames.append(task.render()) if cfg.record else None
+        
         env_ids = dones.nonzero(as_tuple=False).squeeze(-1)
         if len(env_ids):
             ep_count += len(env_ids)
             rw_sum += rew[env_ids, 0].sum().item()
             len_sum += info['progress_buffer'][env_ids].sum().item()
-            # print(ep_count)
-    # clip = ImageSequenceClip(frames, fps=20)
-    # clip.write_videofile('video.mp4')
+            print(ep_count) if ep_count % 25 == 0 else None
+    
+    if cfg.record:
+        clip = ImageSequenceClip(frames, fps=20)
+        clip.write_videofile(f'{cfg.experiment}.mp4')
+   
     print()
+    print(cfg.experiment)
     print(f'avg reward: {rw_sum / ep_count}')
     print(f'avg length: {len_sum / ep_count}')
 
