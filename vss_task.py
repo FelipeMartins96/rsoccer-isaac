@@ -64,8 +64,8 @@ class VSS3v3SelfPlay(VecTask):
             self.cfg['headless'] = False
         else:
             self.cfg['virtual_screen_capture'] = False
-            self.cfg['force_render'] = True
-            self.cfg['headless'] = False
+            self.cfg['force_render'] = False
+            self.cfg['headless'] = True
 
         self.max_episode_length = 400
 

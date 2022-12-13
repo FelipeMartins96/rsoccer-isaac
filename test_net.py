@@ -10,6 +10,11 @@ from rl_games import torch_runner
 from isaacgymenvs.utils.reformat import omegaconf_to_dict, print_dict
 import gym
 from functools import partial
+import logging
+
+# A logger for this file
+log = logging.getLogger(__name__)
+
 
 def random_ou(prev):
     ou_theta = 0.1
@@ -64,14 +69,17 @@ class Runner:
         return action
 
 
-
 def get_vss_player(cfg, ckpt):
     cfg = omegaconf_to_dict(cfg)
     cfg['params']['config']['env_info'] = {
-        'observation_space': gym.spaces.Box(low=-np.inf, high=np.inf, shape=(52,), dtype=np.float32),
-        'action_space': gym.spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32),
+        'observation_space': gym.spaces.Box(
+            low=-np.inf, high=np.inf, shape=(52,), dtype=np.float32
+        ),
+        'action_space': gym.spaces.Box(
+            low=-1.0, high=1.0, shape=(2,), dtype=np.float32
+        ),
         'agents': 1,
-        'value_size': 1
+        'value_size': 1,
     }
     runner = torch_runner.Runner()
     runner.load(cfg)
@@ -79,14 +87,19 @@ def get_vss_player(cfg, ckpt):
     player = runner.create_player()
     player.restore(ckpt)
     return player
+
 
 def get_vsscma_player(cfg, ckpt):
     cfg = omegaconf_to_dict(cfg)
     cfg['params']['config']['env_info'] = {
-        'observation_space': gym.spaces.Box(low=-np.inf, high=np.inf, shape=(52,), dtype=np.float32),
-        'action_space': gym.spaces.Box(low=-1.0, high=1.0, shape=(6,), dtype=np.float32),
+        'observation_space': gym.spaces.Box(
+            low=-np.inf, high=np.inf, shape=(52,), dtype=np.float32
+        ),
+        'action_space': gym.spaces.Box(
+            low=-1.0, high=1.0, shape=(6,), dtype=np.float32
+        ),
         'agents': 1,
-        'value_size': 1
+        'value_size': 1,
     }
     runner = torch_runner.Runner()
     runner.load(cfg)
@@ -94,14 +107,19 @@ def get_vsscma_player(cfg, ckpt):
     player = runner.create_player()
     player.restore(ckpt)
     return player
+
 
 def get_vssdma_player(cfg, ckpt):
     cfg = omegaconf_to_dict(cfg)
     cfg['params']['config']['env_info'] = {
-        'observation_space': gym.spaces.Box(low=-np.inf, high=np.inf, shape=(52,), dtype=np.float32),
-        'action_space': gym.spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32),
+        'observation_space': gym.spaces.Box(
+            low=-np.inf, high=np.inf, shape=(52,), dtype=np.float32
+        ),
+        'action_space': gym.spaces.Box(
+            low=-1.0, high=1.0, shape=(2,), dtype=np.float32
+        ),
         'agents': 1,
-        'value_size': 1
+        'value_size': 1,
     }
     runner = torch_runner.Runner()
     runner.load(cfg)
@@ -110,7 +128,9 @@ def get_vssdma_player(cfg, ckpt):
     player.restore(ckpt)
     return player
 
+
 # get actions
+
 
 def get_obs_with_perms(obs):
     _obs = obs.repeat_interleave(3, dim=0)
@@ -120,11 +140,13 @@ def get_obs_with_perms(obs):
     _obs[:, -6:] = obs[:, -6:].view(-1, 3, 2)[:, permutations].view(-1, 6)
     return _obs
 
+
 def _get_vss1_actions(obs, actions, player):
     player.has_batch_dimension = True
     _action = player.get_action(obs, is_determenistic=True)
     actions[:, :2] = _action
     return actions
+
 
 def _get_dma_actions(obs, actions, player):
     player.has_batch_dimension = True
@@ -133,29 +155,36 @@ def _get_dma_actions(obs, actions, player):
     actions[:, :6] = _action.view(-1, 6)
     return actions
 
+
 def _get_cma_actions(obs, actions, player):
     player.has_batch_dimension = True
     _actions = player.get_action(obs, is_determenistic=True)
     actions[:, :6] = _actions
     return actions
 
+
+def _get_ou_actions(obs, actions, player):
+    return actions
+
+
 @hydra.main(config_name="config", config_path="./cfg")
 def main(cfg):
-    task = VSS3v3SelfPlay(record=False, num_envs=cfg.num_envs, has_grad=False)
-    
+    task = VSS3v3SelfPlay(record=cfg.record, num_envs=cfg.num_envs, has_grad=False)
+
     p_vss = get_vss_player(cfg.vss, '/home/fbm2/isaac/rsoccer-isaac/ppo-0.pth')
     p_cma = get_vsscma_player(cfg.vss, '/home/fbm2/isaac/rsoccer-isaac/ppo-CMA-1.pth')
     p_dma = get_vssdma_player(cfg.vssdma, '/home/fbm2/isaac/rsoccer-isaac/ppo-DMA.pth')
 
-    get_vss1_actions = partial(_get_vss1_actions, player=p_vss)
-    get_vss3_actions = partial(_get_dma_actions, player=p_vss)
-    get_cma_actions = partial(_get_cma_actions, player=p_cma)
-    get_dma_actions = partial(_get_dma_actions, player=p_dma)
+    teams = {
+        'ou': partial(_get_ou_actions, player=None),
+        'vss1': partial(_get_vss1_actions, player=p_vss),
+        'vss3': partial(_get_dma_actions, player=p_vss),
+        'cma': partial(_get_cma_actions, player=p_cma),
+        'dma': partial(_get_dma_actions, player=p_dma),
+    }
 
-    # TODO: Generate gif for each case and run statistics
-    
-    get_blue_actions = get_cma_actions
-    get_yellow_actions = get_dma_actions
+    get_blue_actions = teams[cfg.blue_team]
+    get_yellow_actions = teams[cfg.yellow_team]
 
     obs = task.reset()
     ep_count = 0
@@ -163,8 +192,9 @@ def main(cfg):
     len_sum = 0
     frames = []
     actions = task.zero_actions()
+
     while ep_count < cfg.num_eps:
-        
+
         actions = random_ou(actions)
 
         # Get actions blue
@@ -175,24 +205,23 @@ def main(cfg):
         yellow_actions = get_yellow_actions(obs['obs'][:, 1, :], yellow_actions)
 
         obs, rew, dones, info = task.step(actions)
-        
-        frames.append(task.render()) if cfg.record else None
-        
+
+        frames.append(task.render()) if cfg.record and len(frames) < 1000 else None
+
         env_ids = dones.nonzero(as_tuple=False).squeeze(-1)
         if len(env_ids):
             ep_count += len(env_ids)
             rw_sum += rew[env_ids, 0].sum().item()
             len_sum += info['progress_buffer'][env_ids].sum().item()
             print(ep_count) if ep_count % 25 == 0 else None
-    
+
     if cfg.record:
         clip = ImageSequenceClip(frames, fps=20)
         clip.write_videofile(f'{cfg.experiment}.mp4')
-   
-    print()
-    print(cfg.experiment)
-    print(f'avg reward: {rw_sum / ep_count}')
-    print(f'avg length: {len_sum / ep_count}')
+
+    log.info(
+        f'{cfg.experiment} -> avg goal_score: {rw_sum / ep_count} / avg length: {len_sum / ep_count}'
+    )
 
 
 if __name__ == '__main__':

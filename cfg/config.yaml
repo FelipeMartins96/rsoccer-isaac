@@ -1,10 +1,18 @@
-experiment: 'test_net'
+blue_team: 'ou'
+yellow_team: 'ou'
+experiment: '${blue_team}_vs_${yellow_team}'
 device: 'cuda:0'
-num_envs: 16
+num_envs: 2048
 seed: 42
-num_eps: 1000
-record: False
+num_eps: 5000
+record: True
 
 defaults:
   - vss: VSSPPO
   - vssdma: VSSDecentralizedMAPPO
+
+hydra:
+  run:
+    dir: outputs/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}
+  job:
+    name: ${experiment}
