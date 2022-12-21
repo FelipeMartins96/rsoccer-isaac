@@ -6,13 +6,14 @@ yellow_team: 'ou'
 yellow_ckpt: ''
 yellow_seed: ''
 yellow_tag: ''
+index: ''
+
 experiment: '${blue_team}-${blue_seed}_vs_${yellow_seed}-${yellow_team}'
 device: 'cuda:0'
 num_envs: 2048
 seed: 42
 num_eps: 5000
 record: True
-
 defaults:
   - vss: VSSPPO
   - vssdma: VSSDecentralizedMAPPO

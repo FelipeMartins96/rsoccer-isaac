@@ -11,9 +11,8 @@ from isaacgymenvs.utils.reformat import omegaconf_to_dict, print_dict
 import gym
 from functools import partial
 import logging
-
-# A logger for this file
-log = logging.getLogger(__name__)
+import os
+import pandas as pd
 
 
 def random_ou(prev):
@@ -176,15 +175,15 @@ def get_team_actions(cfg, team, checkpoint):
         return partial(_get_ou_actions, player=None)
     if team == 'zero':
         return partial(_get_ou_actions, player=None)
-    elif team == 'vss1':
+    elif team == 'ppo':
         return partial(_get_vss1_actions, player=get_vss_player(cfg.vss, checkpoint))
-    elif team == 'vss3':
+    elif team == 'ppo-x3':
         return partial(_get_dma_actions, player=get_vss_player(cfg.vss, checkpoint))
-    elif team == 'dma':
+    elif team == 'ppo-dma':
         return partial(
             _get_dma_actions, player=get_vssdma_player(cfg.vssdma, checkpoint)
         )
-    elif team == 'cma':
+    elif team == 'ppo-cma':
         return partial(_get_cma_actions, player=get_vsscma_player(cfg.vss, checkpoint))
     else:
         raise ValueError(f'Unknown team: {team}')
@@ -195,21 +194,8 @@ import time
 
 @hydra.main(config_name="config", config_path="./cfg")
 def main(cfg):
-    print(cfg)
-    start = time.time()
+    experiment = f'{int(cfg.index):03}-{cfg.blue_team}[{cfg.blue_seed}-{cfg.blue_tag}]_vs_{cfg.yellow_team}[{cfg.yellow_seed}-{cfg.yellow_tag}]'
     task = VSS3v3SelfPlay(record=cfg.record, num_envs=cfg.num_envs, has_grad=False)
-
-    # p_vss = get_vss_player(cfg.vss, '/home/fbm2/isaac/rsoccer-isaac/ppo-0.pth')
-    # p_cma = get_vsscma_player(cfg.vss, '/home/fbm2/isaac/rsoccer-isaac/ppo-CMA-1.pth')
-    # p_dma = get_vssdma_player(cfg.vssdma, '/home/fbm2/isaac/rsoccer-isaac/ppo-DMA.pth')
-
-    # teams = {
-    #     'ou': partial(_get_ou_actions, player=None),
-    #     'vss1': partial(_get_vss1_actions, player=p_vss),
-    #     'vss3': partial(_get_dma_actions, player=p_vss),
-    #     'cma': partial(_get_cma_actions, player=p_cma),
-    #     'dma': partial(_get_dma_actions, player=p_dma),
-    # }
 
     get_blue_actions = get_team_actions(cfg, cfg.blue_team, cfg.blue_ckpt)
     get_yellow_actions = get_team_actions(cfg, cfg.yellow_team, cfg.yellow_ckpt)
@@ -241,16 +227,45 @@ def main(cfg):
             ep_count += len(env_ids)
             rw_sum += rew[env_ids, 0].sum().item()
             len_sum += info['progress_buffer'][env_ids].sum().item()
-            print(ep_count) if ep_count % 25 == 0 else None
 
     if cfg.record:
+        os.makedirs('outputs', exist_ok=True)
         clip = ImageSequenceClip(frames, fps=20)
-        clip.write_videofile(f'{cfg.experiment}.mp4')
+        clip.write_videofile(f'outputs/{experiment}.mp4')
 
-    log.info(
-        f'{cfg.experiment} -> avg goal_score: {rw_sum / ep_count} / avg length: {len_sum / ep_count}'
+    result = {
+        'id': cfg.index,
+        'team_a': cfg.blue_team,
+        'team_a_seed': cfg.blue_seed,
+        'team_a_tag': cfg.blue_tag,
+        'team_b': cfg.yellow_team,
+        'team_b_seed': cfg.yellow_seed,
+        'team_b_tag': cfg.yellow_tag,
+        'goal_score': rw_sum / ep_count,
+        'episode_length': len_sum / ep_count,
+    }
+    df = pd.DataFrame(result, index=[0])
+
+    if cfg.blue_team != cfg.yellow_team:
+        result_alt = {
+            'id': cfg.index,
+            'team_a': cfg.yellow_team,
+            'team_a_seed': cfg.yellow_seed,
+            'team_a_tag': cfg.yellow_tag,
+            'team_b': cfg.blue_team,
+            'team_b_seed': cfg.blue_seed,
+            'team_b_tag': cfg.blue_tag,
+            'goal_score': -(rw_sum / ep_count),
+            'episode_length': len_sum / ep_count,
+        }
+        df = df.append(pd.DataFrame(result_alt, index=[1]))
+
+    df.to_csv(
+        'outputs/results.csv',
+        mode='a',
+        index=False,
+        header=not os.path.exists('outputs/results.csv'),
     )
-    print(f'Elapsed time: {time.time() - start}')
 
 
 if __name__ == '__main__':

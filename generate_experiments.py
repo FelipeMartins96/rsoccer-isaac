@@ -39,12 +39,10 @@ teams_combinations = combinations_with_replacement(teams, 2)
 
 f = open('test_nets.sh', 'w')
 ## For each pair
+i = 0
 for team_comb in teams_combinations:
     team_a, team_b = team_comb
     f.write(
-        f'python test_net.py blue_team={team_a.name} blue_ckpt={team_a.checkpoint}  blue_seed={team_a.seed} blue_tag={team_a.tag} yellow_team={team_b.name} yellow_ckpt={team_b.checkpoint} yellow_seed={team_b.seed} yellow_tag={team_b.tag}\n'
+        f'python test_net.py index={i} blue_team={team_a.name} blue_ckpt={team_a.checkpoint}  blue_seed={team_a.seed} blue_tag={team_a.tag} yellow_team={team_b.name} yellow_ckpt={team_b.checkpoint} yellow_seed={team_b.seed} yellow_tag={team_b.tag}\n'
     )
-
-### Get the team name, seed, Last or Best, checkpoint path
-### skip if same team name
-### write to file the experiment
+    i += 1
