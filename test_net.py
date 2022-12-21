@@ -167,24 +167,52 @@ def _get_ou_actions(obs, actions, player):
     return actions
 
 
+def _get_zero_actions(obs, actions, player):
+    return actions * 0
+
+
+def get_team_actions(cfg, team, checkpoint):
+    if team == 'ou':
+        return partial(_get_ou_actions, player=None)
+    if team == 'zero':
+        return partial(_get_ou_actions, player=None)
+    elif team == 'vss1':
+        return partial(_get_vss1_actions, player=get_vss_player(cfg.vss, checkpoint))
+    elif team == 'vss3':
+        return partial(_get_dma_actions, player=get_vss_player(cfg.vss, checkpoint))
+    elif team == 'dma':
+        return partial(
+            _get_dma_actions, player=get_vssdma_player(cfg.vssdma, checkpoint)
+        )
+    elif team == 'cma':
+        return partial(_get_cma_actions, player=get_vsscma_player(cfg.vss, checkpoint))
+    else:
+        raise ValueError(f'Unknown team: {team}')
+
+
+import time
+
+
 @hydra.main(config_name="config", config_path="./cfg")
 def main(cfg):
+    print(cfg)
+    start = time.time()
     task = VSS3v3SelfPlay(record=cfg.record, num_envs=cfg.num_envs, has_grad=False)
 
-    p_vss = get_vss_player(cfg.vss, '/home/fbm2/isaac/rsoccer-isaac/ppo-0.pth')
-    p_cma = get_vsscma_player(cfg.vss, '/home/fbm2/isaac/rsoccer-isaac/ppo-CMA-1.pth')
-    p_dma = get_vssdma_player(cfg.vssdma, '/home/fbm2/isaac/rsoccer-isaac/ppo-DMA.pth')
+    # p_vss = get_vss_player(cfg.vss, '/home/fbm2/isaac/rsoccer-isaac/ppo-0.pth')
+    # p_cma = get_vsscma_player(cfg.vss, '/home/fbm2/isaac/rsoccer-isaac/ppo-CMA-1.pth')
+    # p_dma = get_vssdma_player(cfg.vssdma, '/home/fbm2/isaac/rsoccer-isaac/ppo-DMA.pth')
 
-    teams = {
-        'ou': partial(_get_ou_actions, player=None),
-        'vss1': partial(_get_vss1_actions, player=p_vss),
-        'vss3': partial(_get_dma_actions, player=p_vss),
-        'cma': partial(_get_cma_actions, player=p_cma),
-        'dma': partial(_get_dma_actions, player=p_dma),
-    }
+    # teams = {
+    #     'ou': partial(_get_ou_actions, player=None),
+    #     'vss1': partial(_get_vss1_actions, player=p_vss),
+    #     'vss3': partial(_get_dma_actions, player=p_vss),
+    #     'cma': partial(_get_cma_actions, player=p_cma),
+    #     'dma': partial(_get_dma_actions, player=p_dma),
+    # }
 
-    get_blue_actions = teams[cfg.blue_team]
-    get_yellow_actions = teams[cfg.yellow_team]
+    get_blue_actions = get_team_actions(cfg, cfg.blue_team, cfg.blue_ckpt)
+    get_yellow_actions = get_team_actions(cfg, cfg.yellow_team, cfg.yellow_ckpt)
 
     obs = task.reset()
     ep_count = 0
@@ -206,7 +234,7 @@ def main(cfg):
 
         obs, rew, dones, info = task.step(actions)
 
-        frames.append(task.render()) if cfg.record and len(frames) < 1000 else None
+        frames.append(task.render()) if cfg.record and len(frames) < 300 else None
 
         env_ids = dones.nonzero(as_tuple=False).squeeze(-1)
         if len(env_ids):
@@ -222,6 +250,7 @@ def main(cfg):
     log.info(
         f'{cfg.experiment} -> avg goal_score: {rw_sum / ep_count} / avg length: {len_sum / ep_count}'
     )
+    print(f'Elapsed time: {time.time() - start}')
 
 
 if __name__ == '__main__':

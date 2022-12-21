@@ -1,6 +1,12 @@
 blue_team: 'ou'
+blue_ckpt: ''
+blue_seed: ''
+blue_tag: ''
 yellow_team: 'ou'
-experiment: '${blue_team}_vs_${yellow_team}'
+yellow_ckpt: ''
+yellow_seed: ''
+yellow_tag: ''
+experiment: '${blue_team}-${blue_seed}_vs_${yellow_seed}-${yellow_team}'
 device: 'cuda:0'
 num_envs: 2048
 seed: 42
@@ -10,9 +16,9 @@ record: True
 defaults:
   - vss: VSSPPO
   - vssdma: VSSDecentralizedMAPPO
-
+  
+# set the directory where the output files get saved
 hydra:
+  output_subdir: null
   run:
-    dir: outputs/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}
-  job:
-    name: ${experiment}
+    dir: .
