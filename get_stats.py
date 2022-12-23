@@ -1,6 +1,7 @@
 import pandas as pd
 
 df = pd.read_csv('outputs/results.csv')
+df = df[df.team_a_tag == 'base']
 
 teams = ['ppo', 'ppo-x3', 'ppo-cma', 'ppo-dma', 'ou', 'zero']
 
@@ -18,7 +19,7 @@ for row in teams:
         goal_std_df.loc[row][column] =frame.goal_score.std()
         steps_df.loc[row][column] = frame.episode_length.mean()
         steps_std_df.loc[row][column] = frame.episode_length.std()
-goal_df.astype(float).round(5).to_csv('outputs/goal_stats.csv')
-goal_std_df.astype(float).round(5).to_csv('outputs/goal_std_stats.csv')
-steps_df.astype(float).round(5).to_csv('outputs/steps_stats.csv')
-steps_std_df.astype(float).round(5).to_csv('outputs/steps_std_stats.csv')
+goal_df.astype(float).round(5).to_csv('outputs/summary.csv',mode='a')
+goal_std_df.astype(float).round(5).to_csv('outputs/summary.csv',mode='a')
+steps_df.astype(float).round(5).to_csv('outputs/summary.csv',mode='a')
+steps_std_df.astype(float).round(5).to_csv('outputs/summary.csv',mode='a')

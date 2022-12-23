@@ -171,23 +171,23 @@ def _get_zero_actions(obs, actions, player):
     return actions
 
 
-def get_team_actions(cfg, team, checkpoint):
-    if team == 'ou':
+def get_team_actions(cfg, algo, checkpoint):
+    if algo == 'ou':
         return partial(_get_ou_actions, player=None)
-    if team == 'zero':
+    if algo == 'zero':
         return partial(_get_zero_actions, player=None)
-    elif team == 'ppo':
+    elif algo == 'ppo':
         return partial(_get_vss1_actions, player=get_vss_player(cfg.vss, checkpoint))
-    elif team == 'ppo-x3':
+    elif algo == 'ppo-x3':
         return partial(_get_dma_actions, player=get_vss_player(cfg.vss, checkpoint))
-    elif team == 'ppo-dma':
+    elif algo == 'ppo-dma':
         return partial(
             _get_dma_actions, player=get_vssdma_player(cfg.vssdma, checkpoint)
         )
-    elif team == 'ppo-cma':
+    elif algo == 'ppo-cma':
         return partial(_get_cma_actions, player=get_vsscma_player(cfg.vss, checkpoint))
     else:
-        raise ValueError(f'Unknown team: {team}')
+        raise ValueError(f'Unknown algo: {algo}')
 
 
 import time
@@ -195,11 +195,11 @@ import time
 
 @hydra.main(config_name="config", config_path="./cfg")
 def main(cfg):
-    experiment = f'{int(cfg.index):03}-{cfg.blue_team}[{cfg.blue_seed}-{cfg.blue_tag}]_vs_{cfg.yellow_team}[{cfg.yellow_seed}-{cfg.yellow_tag}]'
+    experiment = f'{int(cfg.index):03}-{cfg.blue_team}[{cfg.blue_seed}-{cfg.blue_algo}]_vs_{cfg.yellow_team}[{cfg.yellow_seed}-{cfg.yellow_algo}]'
     task = VSS3v3SelfPlay(record=cfg.record, num_envs=cfg.num_envs, has_grad=False)
 
-    get_blue_actions = get_team_actions(cfg, cfg.blue_team, cfg.blue_ckpt)
-    get_yellow_actions = get_team_actions(cfg, cfg.yellow_team, cfg.yellow_ckpt)
+    get_blue_actions = get_team_actions(cfg, cfg.blue_team_algo, cfg.blue_ckpt)
+    get_yellow_actions = get_team_actions(cfg, cfg.yellow_team_algo, cfg.yellow_ckpt)
 
     obs = task.reset()
     ep_count = 0
@@ -238,10 +238,10 @@ def main(cfg):
         'id': cfg.index,
         'team_a': cfg.blue_team,
         'team_a_seed': cfg.blue_seed,
-        'team_a_tag': cfg.blue_tag,
+        'team_a_algo': cfg.blue_algo,
         'team_b': cfg.yellow_team,
         'team_b_seed': cfg.yellow_seed,
-        'team_b_tag': cfg.yellow_tag,
+        'team_b_algo': cfg.yellow_algo,
         'goal_score': rw_sum / ep_count,
         'episode_length': len_sum / ep_count,
     }
@@ -252,10 +252,10 @@ def main(cfg):
             'id': cfg.index,
             'team_a': cfg.yellow_team,
             'team_a_seed': cfg.yellow_seed,
-            'team_a_tag': cfg.yellow_tag,
+            'team_a_algo': cfg.yellow_algo,
             'team_b': cfg.blue_team,
             'team_b_seed': cfg.blue_seed,
-            'team_b_tag': cfg.blue_tag,
+            'team_b_algo': cfg.blue_algo,
             'goal_score': -(rw_sum / ep_count),
             'episode_length': len_sum / ep_count,
         }
