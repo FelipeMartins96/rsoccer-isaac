@@ -167,14 +167,15 @@ def _get_ou_actions(obs, actions, player):
 
 
 def _get_zero_actions(obs, actions, player):
-    return actions * 0
+    actions = actions * 0
+    return actions
 
 
 def get_team_actions(cfg, team, checkpoint):
     if team == 'ou':
         return partial(_get_ou_actions, player=None)
     if team == 'zero':
-        return partial(_get_ou_actions, player=None)
+        return partial(_get_zero_actions, player=None)
     elif team == 'ppo':
         return partial(_get_vss1_actions, player=get_vss_player(cfg.vss, checkpoint))
     elif team == 'ppo-x3':
