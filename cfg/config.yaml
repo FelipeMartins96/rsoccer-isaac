@@ -1,11 +1,11 @@
 blue_team: 'ou'
 blue_ckpt: ''
 blue_seed: ''
-blue_tag: ''
+blue_algo: ''
 yellow_team: 'ou'
 yellow_ckpt: ''
 yellow_seed: ''
-yellow_tag: ''
+yellow_algo: ''
 index: ''
 
 experiment: '${blue_team}-${blue_seed}_vs_${yellow_seed}-${yellow_team}'

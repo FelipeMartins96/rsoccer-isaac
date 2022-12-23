@@ -198,8 +198,8 @@ def main(cfg):
     experiment = f'{int(cfg.index):03}-{cfg.blue_team}[{cfg.blue_seed}-{cfg.blue_algo}]_vs_{cfg.yellow_team}[{cfg.yellow_seed}-{cfg.yellow_algo}]'
     task = VSS3v3SelfPlay(record=cfg.record, num_envs=cfg.num_envs, has_grad=False)
 
-    get_blue_actions = get_team_actions(cfg, cfg.blue_team_algo, cfg.blue_ckpt)
-    get_yellow_actions = get_team_actions(cfg, cfg.yellow_team_algo, cfg.yellow_ckpt)
+    get_blue_actions = get_team_actions(cfg, cfg.blue_algo, cfg.blue_ckpt)
+    get_yellow_actions = get_team_actions(cfg, cfg.yellow_algo, cfg.yellow_ckpt)
 
     obs = task.reset()
     ep_count = 0

@@ -15,7 +15,7 @@ for run in runs:
 
     ## get best nn
     algo = run.split('_')[0]
-    name = run.split('_')[:-1].join('_')
+    name = '_'.join(run.split('_')[:-1])
     seed = run.split('_')[-1]
     path = os.path.abspath(os.path.join(run_path, f'{run}.pth'))
     teams.append(team(name, seed, algo, path))
@@ -37,7 +37,7 @@ teams.append(team('ppo-dma_oldEnv', '', 'ppo-dma', path))
 vss3_teams = []
 for t in teams:
     if t.algo == 'ppo':
-        vss3_teams.append(team(t.name+'_x3', t.seed, t.algo+'-x3', t.checkpoint))
+        vss3_teams.append(team(t.name + '_x3', t.seed, t.algo + '-x3', t.checkpoint))
 teams += vss3_teams
 
 ## Add OU and Zero cases
