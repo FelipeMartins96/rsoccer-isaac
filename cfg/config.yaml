@@ -1,8 +1,8 @@
-blue_exp: 'default_a'
+blue_exp: 'default-a'
 blue_ckpt: ''
 blue_seed: 0
 blue_algo: 'ou'
-yellow_exp: 'default_b'
+yellow_exp: 'default-b'
 yellow_ckpt: ''
 yellow_seed: 0
 yellow_algo: 'ou'

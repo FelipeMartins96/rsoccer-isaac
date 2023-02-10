@@ -1,25 +1,35 @@
 import pandas as pd
+import sys
+import os
 
-df = pd.read_csv('outputs/results.csv')
-df = df[df.team_a_tag == 'base']
+if len(sys.argv) != 2:
+    print("need results path arg")
 
-teams = ['ppo', 'ppo-x3', 'ppo-cma', 'ppo-dma', 'ou', 'zero']
+df = pd.read_csv(sys.argv[1])
 
-goal_df = pd.DataFrame(index=teams, columns=teams)
+blue_exp = df.iloc[0].blue_experiment
+yellow_exp = df.iloc[0].yellow_experiment
+
+blue_algos = [f'{blue_exp}_' + a for a in df.blue_algo.unique()]
+yellow_algos = [f'{yellow_exp}_' + a for a in df.blue_algo.unique()]
+
+goal_df = pd.DataFrame(index=blue_algos, columns=yellow_algos)
 goal_std_df = goal_df.copy()
 steps_df = goal_df.copy()
 steps_std_df = goal_df.copy()
 
-for row in teams:
-    for column in teams:
+for row in blue_algos:
+    for column in yellow_algos:
         # get mean and std of goal score and ep len for row team vs column team
-        frame = df[df.team_a == row]
-        frame = frame[frame.team_b == column]
+        frame = df[df.blue_algo == row.split('_')[1]]
+        frame = frame[frame.yellow_algo == column.split('_')[1]]
         goal_df.loc[row][column] = frame.goal_score.mean()
-        goal_std_df.loc[row][column] =frame.goal_score.std()
+        goal_std_df.loc[row][column] = frame.goal_score.std()
         steps_df.loc[row][column] = frame.episode_length.mean()
         steps_std_df.loc[row][column] = frame.episode_length.std()
-goal_df.astype(float).round(5).to_csv('outputs/summary.csv',mode='a')
-goal_std_df.astype(float).round(5).to_csv('outputs/summary.csv',mode='a')
-steps_df.astype(float).round(5).to_csv('outputs/summary.csv',mode='a')
-steps_std_df.astype(float).round(5).to_csv('outputs/summary.csv',mode='a')
+
+results_path = os.path.join(os.path.dirname(sys.argv[1]), 'summary.csv')
+goal_df.astype(float).round(5).to_csv(results_path, mode='a')
+goal_std_df.astype(float).round(5).to_csv(results_path, mode='a')
+steps_df.astype(float).round(5).to_csv(results_path, mode='a')
+steps_std_df.astype(float).round(5).to_csv(results_path, mode='a')
