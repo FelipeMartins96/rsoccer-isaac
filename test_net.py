@@ -1,7 +1,5 @@
 import isaacgym
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
 from vss_task import VSS3v3SelfPlay
 from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
@@ -10,7 +8,6 @@ from rl_games import torch_runner
 from isaacgymenvs.utils.reformat import omegaconf_to_dict, print_dict
 import gym
 from functools import partial
-import logging
 import os
 import pandas as pd
 
@@ -30,42 +27,6 @@ def random_ou(prev):
         )
     )
     return noise.clamp(-1.0, 1.0)
-
-
-class Runner:
-    def __init__(self, task):
-
-        self.task = task
-        self.net_1 = Actor(task, 1).to(task.rl_device)
-        # self.net_3 = Actor(task, 3).to(task.rl_device)
-        # self.net_3_alt = Actor(task, 3).to(task.rl_device)
-        self.net_1.load_state_dict(
-            torch.load(
-                '/home/fbm2/isaac/rsoccer-isaac/runs/Nov08_14-55-14_SARCO-021-vs-ou/actor1-vs-ou.pth'
-            )
-        )
-        # self.net_3.load_state_dict(torch.load('actor3controlled-stopped-onlygoal.pth'))
-        # self.net_3_alt.load_state_dict(
-        # torch.load('actor3controlled-stopped-onlygoal-23-11-23-28.pth')
-        # )
-        self.zero_action = task.zero_actions()
-        self.noise = task.zero_actions()
-
-    def get_actions(self, obs):
-        with torch.no_grad():
-            # acts_b = self.net_3_alt(obs['obs'][:, 0, :])
-            acts_b = self.net_1(obs['obs'][:, 0, :])
-            # acts_y = self.net_1(obs['obs'][:, 0, :])
-
-            self.noise = random_ou(self.noise)
-            # action = self.zero_action.clone()
-            action = self.noise.clone()
-            # .reshape(
-            #     self.task.num_envs, self.task.num_agents, -1
-            # )
-            action[:, 0:2] = acts_b
-            # action[:, 1, 0:2] = acts_y
-        return action
 
 
 def get_vss_player(cfg, ckpt):
@@ -195,7 +156,8 @@ import time
 
 @hydra.main(config_name="config", config_path="./cfg")
 def main(cfg):
-    experiment = f'{int(cfg.index):03}-{cfg.blue_team}[{cfg.blue_seed}-{cfg.blue_algo}]_vs_{cfg.yellow_team}[{cfg.yellow_seed}-{cfg.yellow_algo}]'
+    experiment = f'{cfg.blue_algo}_{cfg.blue_seed}x{cfg.yellow_algo}_{cfg.yellow_seed}'
+
     task = VSS3v3SelfPlay(record=cfg.record, num_envs=cfg.num_envs, has_grad=False)
 
     get_blue_actions = get_team_actions(cfg, cfg.blue_algo, cfg.blue_ckpt)
@@ -221,7 +183,7 @@ def main(cfg):
 
         obs, rew, dones, info = task.step(actions)
 
-        frames.append(task.render()) if cfg.record and len(frames) < 300 else None
+        frames.append(task.render()) if cfg.record and len(frames) < 500 else None
 
         env_ids = dones.nonzero(as_tuple=False).squeeze(-1)
         if len(env_ids):
@@ -229,43 +191,30 @@ def main(cfg):
             rw_sum += rew[env_ids, 0].sum().item()
             len_sum += info['progress_buffer'][env_ids].sum().item()
 
+    output_path = os.path.join('outputs', f'{cfg.blue_exp}_{cfg.yellow_exp}')
     if cfg.record:
-        os.makedirs('outputs', exist_ok=True)
+        os.makedirs(output_path, exist_ok=True)
         clip = ImageSequenceClip(frames, fps=20)
-        clip.write_videofile(f'outputs/{experiment}.mp4')
+        clip.write_videofile(os.path.join(output_path, f'{experiment}.mp4'))
 
     result = {
-        'id': cfg.index,
-        'team_a': cfg.blue_team,
-        'team_a_seed': cfg.blue_seed,
-        'team_a_algo': cfg.blue_algo,
-        'team_b': cfg.yellow_team,
-        'team_b_seed': cfg.yellow_seed,
-        'team_b_algo': cfg.yellow_algo,
+        'index': cfg.index,
+        'blue_experiment': cfg.blue_exp,
+        'blue_algo': cfg.blue_algo,
+        'blue_seed': cfg.blue_seed,
+        'yellow_experiment': cfg.yellow_exp,
+        'yellow_algo': cfg.yellow_algo,
+        'yellow_seed': cfg.yellow_seed,
         'goal_score': rw_sum / ep_count,
         'episode_length': len_sum / ep_count,
     }
     df = pd.DataFrame(result, index=[0])
 
-    if cfg.blue_team != cfg.yellow_team:
-        result_alt = {
-            'id': cfg.index,
-            'team_a': cfg.yellow_team,
-            'team_a_seed': cfg.yellow_seed,
-            'team_a_algo': cfg.yellow_algo,
-            'team_b': cfg.blue_team,
-            'team_b_seed': cfg.blue_seed,
-            'team_b_algo': cfg.blue_algo,
-            'goal_score': -(rw_sum / ep_count),
-            'episode_length': len_sum / ep_count,
-        }
-        df = df.append(pd.DataFrame(result_alt, index=[1]))
-
     df.to_csv(
-        'outputs/results.csv',
+        os.path.join(output_path, 'results.csv'),
         mode='a',
         index=False,
-        header=not os.path.exists('outputs/results.csv'),
+        header=not os.path.exists(os.path.join(output_path, 'results.csv')),
     )
 
 

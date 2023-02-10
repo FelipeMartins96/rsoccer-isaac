@@ -1,14 +1,13 @@
-blue_team: 'ou'
+blue_exp: 'default_a'
 blue_ckpt: ''
-blue_seed: ''
-blue_algo: ''
-yellow_team: 'ou'
+blue_seed: 0
+blue_algo: 'ou'
+yellow_exp: 'default_b'
 yellow_ckpt: ''
-yellow_seed: ''
-yellow_algo: ''
-index: ''
+yellow_seed: 0
+yellow_algo: 'ou'
+index: 0
 
-experiment: '${blue_team}-${blue_seed}_vs_${yellow_seed}-${yellow_team}'
 device: 'cuda:0'
 num_envs: 2048
 seed: 42

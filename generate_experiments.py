@@ -43,8 +43,8 @@ for run in [r for r in runs if EXPERIMENT_B in r]:
 
 
 ## Add OU and Zero cases
-teams_a += [team(EXPERIMENT_A, '', 'ou', ''), team(EXPERIMENT_A, '', 'zero', '')]
-teams_b += [team(EXPERIMENT_B, '', 'ou', ''), team(EXPERIMENT_B, '', 'zero', '')]
+teams_a += [team(EXPERIMENT_A, 0, 'ou', ''), team(EXPERIMENT_A, 0, 'zero', '')]
+teams_b += [team(EXPERIMENT_B, 0, 'ou', ''), team(EXPERIMENT_B, 0, 'zero', '')]
 
 f = open('test_nets.sh', 'w')
 
