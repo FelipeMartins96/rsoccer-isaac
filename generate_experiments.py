@@ -2,9 +2,6 @@ import os
 from collections import namedtuple
 from itertools import combinations_with_replacement
 
-TOTAL_EPS = 1000
-## Get folders list
-
 team = namedtuple('team', ['experiment', 'seed', 'algo', 'checkpoint'])
 
 EXPERIMENT_A = 'teste'
@@ -14,6 +11,7 @@ EXPERIMENT_B = 'teste-2'
 teams_a = []
 teams_b = []
 
+## Get folders list
 runs = os.listdir('runs')
 for run in [r for r in runs if EXPERIMENT_A in r]:
     run_path = os.path.join('runs', run, 'nn')
