@@ -7,11 +7,12 @@ if len(sys.argv) != 2:
 
 df = pd.read_csv(sys.argv[1])
 
+algos = ['ppo', 'ppo-x3', 'ppo-cma', 'ppo-dma', 'ou', 'zero']
 blue_exp = df.iloc[0].blue_experiment
 yellow_exp = df.iloc[0].yellow_experiment
 
-blue_algos = [f'{blue_exp}_' + a for a in df.blue_algo.unique()]
-yellow_algos = [f'{yellow_exp}_' + a for a in df.blue_algo.unique()]
+blue_algos = [f'{blue_exp}_' + a for a in algos]
+yellow_algos = [f'{yellow_exp}_' + a for a in algos]
 
 goal_df = pd.DataFrame(index=blue_algos, columns=yellow_algos)
 goal_std_df = goal_df.copy()
@@ -28,7 +29,7 @@ for row in blue_algos:
         steps_df.loc[row][column] = frame.episode_length.mean()
         steps_std_df.loc[row][column] = frame.episode_length.std()
 
-results_path = os.path.join(os.path.dirname(sys.argv[1]), 'summary.csv')
+results_path = os.path.join(os.path.dirname(sys.argv[1]), '0_summary.csv')
 goal_df.astype(float).round(5).to_csv(results_path, mode='a')
 goal_std_df.astype(float).round(5).to_csv(results_path, mode='a')
 steps_df.astype(float).round(5).to_csv(results_path, mode='a')

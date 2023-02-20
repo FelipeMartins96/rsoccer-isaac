@@ -8,6 +8,7 @@ yellow_seed: 0
 yellow_algo: 'ou'
 index: 0
 
+experiment: ''
 device: 'cuda:0'
 num_envs: 2048
 seed: 42

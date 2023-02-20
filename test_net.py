@@ -10,7 +10,7 @@ import gym
 from functools import partial
 import os
 import pandas as pd
-
+from tqdm import tqdm
 
 def random_ou(prev):
     ou_theta = 0.1
@@ -166,6 +166,7 @@ def main(cfg):
     frames = []
     actions = task.zero_actions()
 
+    pbar = tqdm(desc=str(cfg.index), total=cfg.num_eps)
     while ep_count < cfg.num_eps:
 
         actions = random_ou(actions)
@@ -181,14 +182,18 @@ def main(cfg):
 
         obs, rew, dones, info = task.step(actions)
 
-        frames.append(task.render()) if cfg.record and len(frames) < 500 else None
+        frames.append(task.render()) if cfg.record and len(frames) < 250 else None
 
         env_ids = dones.nonzero(as_tuple=False).squeeze(-1)
         if len(env_ids):
             ep_count += len(env_ids)
             rw_sum += rew[env_ids, 0].sum().item()
             len_sum += info['progress_buffer'][env_ids].sum().item()
+            pbar.update(len(env_ids))
 
+    pbar.close()
+    del task
+    
     output_path = os.path.join('outputs', f'{cfg.blue_exp}_{cfg.yellow_exp}')
     if cfg.record:
         os.makedirs(output_path, exist_ok=True)

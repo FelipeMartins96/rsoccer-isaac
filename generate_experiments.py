@@ -4,8 +4,8 @@ from itertools import combinations_with_replacement
 
 team = namedtuple('team', ['experiment', 'seed', 'algo', 'checkpoint'])
 
-EXPERIMENT_A = 'teste'
-EXPERIMENT_B = 'teste-2'
+EXPERIMENT_A = 'exp006'
+EXPERIMENT_B = 'exp006'
 
 ## Get nn path, last and best
 teams_a = []
@@ -25,7 +25,7 @@ for run in [r for r in runs if EXPERIMENT_A in r]:
     teams_a.append(team(experiment, seed, algo, path))
 
     if algo == 'ppo':
-        teams_b.append(team(experiment, seed, algo + '-x3', path))
+        teams_a.append(team(experiment, seed, algo + '-x3', path))
 
 for run in [r for r in runs if EXPERIMENT_B in r]:
     run_path = os.path.join('runs', run, 'nn')
@@ -47,11 +47,16 @@ teams_a += [team(EXPERIMENT_A, 0, 'ou', ''), team(EXPERIMENT_A, 0, 'zero', '')]
 teams_b += [team(EXPERIMENT_B, 0, 'ou', ''), team(EXPERIMENT_B, 0, 'zero', '')]
 
 f = open('test_nets.sh', 'w')
+f.write(
+    'pkill -f Xvfb\n'
+)
 
 ## For each pair
 i = 0
 for t_a in teams_a:
     for t_b in teams_b:
+        if t_a.experiment == t_b.experiment and t_a.algo == t_b.algo and t_a.seed == t_b.seed:
+            continue
         f.write(
             f'python test_net.py index={i} blue_exp={t_a.experiment} blue_algo={t_a.algo} blue_seed={t_a.seed} blue_ckpt={t_a.checkpoint} yellow_exp={t_b.experiment} yellow_algo={t_b.algo} yellow_seed={t_b.seed} yellow_ckpt={t_b.checkpoint}\n'
         )

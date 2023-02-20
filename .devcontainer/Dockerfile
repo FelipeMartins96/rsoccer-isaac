@@ -9,7 +9,7 @@ RUN apt-get update \
 WORKDIR /opt
 
 RUN pip install --upgrade pip & \
-    pip install black
+    pip install black moviepy pandas
 
 RUN git clone \
     https://github.com/NVIDIA-Omniverse/IsaacGymEnvs.git && \
