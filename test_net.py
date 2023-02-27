@@ -12,6 +12,7 @@ import os
 import pandas as pd
 from tqdm import tqdm
 
+
 def random_ou(prev):
     ou_theta = 0.1
     ou_sigma = 0.15
@@ -89,7 +90,6 @@ def get_vssdma_player(cfg, ckpt):
     return player
 
 
-
 def get_obs_with_perms(obs):
     _obs = obs.repeat_interleave(3, dim=0)
     permutations = [[0, 1, 2], [1, 2, 0], [2, 0, 1]]
@@ -98,7 +98,9 @@ def get_obs_with_perms(obs):
     _obs[:, -6:] = obs[:, -6:].view(-1, 3, 2)[:, permutations].view(-1, 6)
     return _obs
 
+
 # get actions
+
 
 def _get_vss1_actions(obs, actions, player):
     player.has_batch_dimension = True
@@ -163,6 +165,7 @@ def main(cfg):
     ep_count = 0
     rw_sum = 0
     len_sum = 0
+    blue_score_sum, yellow_score_sum = 0, 0
     frames = []
     actions = task.zero_actions()
 
@@ -170,7 +173,7 @@ def main(cfg):
     while ep_count < cfg.num_eps:
 
         actions = random_ou(actions)
-        
+
         # Get actions blue
         blue_actions = actions.view(-1, 2, 6)[:, 0, :]
         blue_actions = get_blue_actions(obs['obs'][:, 0, :], blue_actions)
@@ -187,13 +190,19 @@ def main(cfg):
         env_ids = dones.nonzero(as_tuple=False).squeeze(-1)
         if len(env_ids):
             ep_count += len(env_ids)
-            rw_sum += rew[env_ids, 0].sum().item()
+            rws_tensor = rew[env_ids, 0]
+            blue_wins = (rws_tensor == 1).sum().item()
+            ties = (rws_tensor == 0).sum().item()
+            yellow_wins = (rws_tensor == -1).sum().item()
+            blue_score_sum += (blue_wins * 3) + ties
+            yellow_score_sum += (yellow_wins * 3) + ties
+            rw_sum += rws_tensor.sum().item()
             len_sum += info['progress_buffer'][env_ids].sum().item()
             pbar.update(len(env_ids))
 
     pbar.close()
     del task
-    
+
     output_path = os.path.join('outputs', f'{cfg.blue_exp}_{cfg.yellow_exp}')
     if cfg.record:
         os.makedirs(output_path, exist_ok=True)
@@ -208,6 +217,8 @@ def main(cfg):
         'yellow_experiment': cfg.yellow_exp,
         'yellow_algo': cfg.yellow_algo,
         'yellow_seed': cfg.yellow_seed,
+        'blue_score': blue_score_sum / ep_count,
+        'yellow_score': yellow_score_sum / ep_count,
         'goal_score': rw_sum / ep_count,
         'episode_length': len_sum / ep_count,
     }

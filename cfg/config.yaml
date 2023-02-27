@@ -10,7 +10,7 @@ index: 0
 
 experiment: ''
 device: 'cuda:0'
-num_envs: 2048
+num_envs: 1024
 seed: 42
 num_eps: 5000
 record: True

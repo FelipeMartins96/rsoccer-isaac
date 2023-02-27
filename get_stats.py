@@ -18,6 +18,7 @@ goal_df = pd.DataFrame(index=blue_algos, columns=yellow_algos)
 goal_std_df = goal_df.copy()
 steps_df = goal_df.copy()
 steps_std_df = goal_df.copy()
+score_df = goal_df.copy()
 
 for row in blue_algos:
     for column in yellow_algos:
@@ -28,9 +29,12 @@ for row in blue_algos:
         goal_std_df.loc[row][column] = frame.goal_score.std()
         steps_df.loc[row][column] = frame.episode_length.mean()
         steps_std_df.loc[row][column] = frame.episode_length.std()
+        score_df.loc[row][column] = frame.blue_score.mean()
 
 results_path = os.path.join(os.path.dirname(sys.argv[1]), '0_summary.csv')
 goal_df.astype(float).round(5).to_csv(results_path, mode='a')
 goal_std_df.astype(float).round(5).to_csv(results_path, mode='a')
 steps_df.astype(float).round(5).to_csv(results_path, mode='a')
 steps_std_df.astype(float).round(5).to_csv(results_path, mode='a')
+score_df.astype(float).round(5).to_csv(results_path, mode='a')
+scores_df = scores_df.mean(1).astype(float).round(5).to_csv(results_path, mode='a')
